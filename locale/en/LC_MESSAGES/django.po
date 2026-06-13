@@ -1,0 +1,424 @@
+# Django translations for Plan de Trabajo
+msgid ""
+msgstr ""
+"Project-Id-Version: 1.0.0\n"
+"Report-Msgid-Bugs-To: admin@plantrabajo.cu\n"
+"POT-Creation-Date: 2026-06-11 03:30-0500\n"
+"PO-Revision-Date: 2026-06-11 03:30-0500\n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: apps/core/models.py
+msgid "Usuario"
+msgstr "User"
+
+msgid "Nombre de Usuario"
+msgstr "Username"
+
+msgid "Nombre"
+msgstr "First Name"
+
+msgid "Apellidos"
+msgstr "Last Name"
+
+msgid "Correo Electrónico"
+msgstr "Email"
+
+msgid "Cargo"
+msgstr "Position"
+
+msgid "Aprobador de Plan"
+msgstr "Plan Approver"
+
+msgid "Deshabilitado"
+msgstr "Disabled"
+
+msgid "Rol"
+msgstr "Role"
+
+msgid "Roles"
+msgstr "Roles"
+
+msgid "Usuario por Rol"
+msgstr "User Role"
+
+msgid "Usuarios por Rol"
+msgstr "User Roles"
+
+msgid "Unidad Organizativa"
+msgstr "Organizational Unit"
+
+msgid "Unidades Organizativas"
+msgstr "Organizational Units"
+
+msgid "Unidad Padre"
+msgstr "Parent Unit"
+
+msgid "Responsable"
+msgstr "Responsible"
+
+msgid "Categoría"
+msgstr "Category"
+
+msgid "Categorías"
+msgstr "Categories"
+
+msgid "Tipo de Actividad"
+msgstr "Activity Type"
+
+msgid "Tipos de Actividad"
+msgstr "Activity Types"
+
+msgid "Area de Resultado Clave"
+msgstr "Key Result Area"
+
+msgid "Areas de Resultados Clave"
+msgstr "Key Result Areas"
+
+msgid "Número"
+msgstr "Number"
+
+msgid "Objetivo de Trabajo"
+msgstr "Work Objective"
+
+msgid "Objetivos de Trabajo"
+msgstr "Work Objectives"
+
+msgid "Criterio de Medida"
+msgstr "Measurement Criterion"
+
+msgid "Criterios de Medida"
+msgstr "Measurement Criteria"
+
+msgid "Lineamiento"
+msgstr "Guideline"
+
+msgid "Lineamientos"
+msgstr "Guidelines"
+
+msgid "Descripción"
+msgstr "Description"
+
+msgid "Permiso por Objeto"
+msgstr "Object Permission"
+
+msgid "Permisos por Objeto"
+msgstr "Object Permissions"
+
+msgid "Tipo Permiso"
+msgstr "Permission Type"
+
+msgid "Tipo Objeto"
+msgstr "Object Type"
+
+msgid "ID Objeto"
+msgstr "Object ID"
+
+msgid "Configuración Email"
+msgstr "Email Configuration"
+
+msgid "Configuración Sistema"
+msgstr "System Configuration"
+
+msgid "Configuraciones Sistema"
+msgstr "System Configurations"
+
+msgid "Clave"
+msgstr "Key"
+
+msgid "Valor"
+msgstr "Value"
+
+#: apps/activities/models.py
+msgid "Actividad"
+msgstr "Activity"
+
+msgid "Actividades"
+msgstr "Activities"
+
+msgid "Lugar"
+msgstr "Place"
+
+msgid "Responsables"
+msgstr "Responsibles"
+
+msgid "Participantes"
+msgstr "Participants"
+
+msgid "Importante"
+msgstr "Important"
+
+msgid "General"
+msgstr "General"
+
+msgid "Color"
+msgstr "Color"
+
+msgid "Objetivo Asociado"
+msgstr "Associated Objective"
+
+msgid "Criterio de Medida"
+msgstr "Measurement Criterion"
+
+msgid "Lineamiento de Actividad"
+msgstr "Activity Guideline"
+
+msgid "Lineamientos de Actividades"
+msgstr "Activity Guidelines"
+
+msgid "Estado"
+msgstr "Status"
+
+msgid "Actividad por UO"
+msgstr "Activity by OU"
+
+msgid "Actividades por UO"
+msgstr "Activities by OU"
+
+msgid "Actividad Mapeada"
+msgstr "Mapped Activity"
+
+msgid "Actividades Mapeadas"
+msgstr "Mapped Activities"
+
+msgid "Actividad Incumplida"
+msgstr "Unfulfilled Activity"
+
+msgid "Actividades Incumplidas"
+msgstr "Unfulfilled Activities"
+
+msgid "Adjunto de Actividad"
+msgstr "Activity Attachment"
+
+msgid "Adjuntos de Actividades"
+msgstr "Activity Attachments"
+
+msgid "Archivo"
+msgstr "File"
+
+msgid "Comentario de Actividad"
+msgstr "Activity Comment"
+
+msgid "Comentarios de Actividades"
+msgstr "Activity Comments"
+
+msgid "Comentario"
+msgstr "Comment"
+
+#: apps/schedule/models.py
+msgid "Periodo de Cronograma"
+msgstr "Schedule Period"
+
+msgid "Periodos de Cronograma"
+msgstr "Schedule Periods"
+
+msgid "Fecha Inicio"
+msgstr "Start Date"
+
+msgid "Fecha Fin"
+msgstr "End Date"
+
+msgid "Extraplan"
+msgstr "Extra Plan"
+
+msgid "Observación"
+msgstr "Observation"
+
+msgid "Hora Inicio"
+msgstr "Start Time"
+
+msgid "Hora Fin"
+msgstr "End Time"
+
+msgid "Incidencia"
+msgstr "Incidence"
+
+msgid "Modificado"
+msgstr "Modified"
+
+msgid "Periodo de Cronograma Mapeado"
+msgstr "Mapped Schedule Period"
+
+msgid "Periodos de Cronograma Mapeados"
+msgstr "Mapped Schedule Periods"
+
+msgid "Cronograma por UO"
+msgstr "Schedule by OU"
+
+msgid "Cronogramas por UO"
+msgstr "Schedules by OU"
+
+msgid "Día Laborable"
+msgstr "Work Day"
+
+msgid "Días Laborables"
+msgstr "Work Days"
+
+msgid "Día"
+msgstr "Day"
+
+msgid "Plan Aprobado"
+msgstr "Approved Plan"
+
+msgid "Planes Aprobados"
+msgstr "Approved Plans"
+
+msgid "Fecha del Plan"
+msgstr "Plan Date"
+
+msgid "Fecha Aprobado"
+msgstr "Approved Date"
+
+msgid "Comentario de Cronograma"
+msgstr "Schedule Comment"
+
+msgid "Comentarios de Cronogramas"
+msgstr "Schedule Comments"
+
+#: apps/communication/models.py
+msgid "Mensaje"
+msgstr "Message"
+
+msgid "Mensajes"
+msgstr "Messages"
+
+msgid "Asunto"
+msgstr "Subject"
+
+msgid "Cuerpo"
+msgstr "Body"
+
+msgid "Remitente"
+msgstr "Sender"
+
+msgid "Destinatario"
+msgstr "Recipient"
+
+msgid "Notificación"
+msgstr "Notification"
+
+msgid "Notificaciones"
+msgstr "Notifications"
+
+msgid "Leído"
+msgstr "Read"
+
+#: apps/logs/models.py
+msgid "Registro de Auditoría"
+msgstr "Audit Log"
+
+msgid "Registros de Auditoría"
+msgstr "Audit Logs"
+
+msgid "Dirección IP"
+msgstr "IP Address"
+
+msgid "Diferencia de Datos"
+msgstr "Data Diff"
+
+# Common actions
+msgid "Crear"
+msgstr "Create"
+
+msgid "Editar"
+msgstr "Edit"
+
+msgid "Eliminar"
+msgstr "Delete"
+
+msgid "Guardar"
+msgstr "Save"
+
+msgid "Cancelar"
+msgstr "Cancel"
+
+msgid "Cerrar Sesión"
+msgstr "Logout"
+
+msgid "Iniciar Sesión"
+msgstr "Login"
+
+msgid "Contraseña"
+msgstr "Password"
+
+msgid "Contraseña Actual"
+msgstr "Current Password"
+
+msgid "Nueva Contraseña"
+msgstr "New Password"
+
+msgid "Confirmar Contraseña"
+msgstr "Confirm Password"
+
+msgid "Cambiar Contraseña"
+msgstr "Change Password"
+
+msgid "Error"
+msgstr "Error"
+
+msgid "Éxito"
+msgstr "Success"
+
+msgid "Advertencia"
+msgstr "Warning"
+
+msgid "Información"
+msgstr "Information"
+
+msgid "Cargando"
+msgstr "Loading"
+
+msgid "Sin resultados"
+msgstr "No results"
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Página"
+msgstr "Page"
+
+msgid "Anterior"
+msgstr "Previous"
+
+msgid "Siguiente"
+msgstr "Next"
+
+msgid "Búsqueda"
+msgstr "Search"
+
+msgid "Filtrar"
+msgstr "Filter"
+
+msgid "Aplicar"
+msgstr "Apply"
+
+msgid "Reiniciar"
+msgstr "Reset"
+
+msgid "Exportar"
+msgstr "Export"
+
+msgid "Importar"
+msgstr "Import"
+
+msgid "Descargar"
+msgstr "Download"
+
+msgid "Subir"
+msgstr "Upload"
+
+msgid "Seleccionar"
+msgstr "Select"
+
+msgid "Seleccionar archivo"
+msgstr "Select file"
+
+msgid "Todos"
+msgstr "All"
+
+msgid "Ninguno"
+msgstr "None"

@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg
+*.egg-info/
+dist/
+build/
+*.sqlite3
+*.mo
+*.pot
+instance/
+*.local
+local_settings.py
+*.db
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Tests & Coverage
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+.tox/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Django
+staticfiles/
+media/
+backups/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Docker
+.env
+.env.prod
+.env.dev
+
+# Logs
+*.log
+
+# TypeScript
+*.tsbuildinfo
+*.tsbuildinfo.*
