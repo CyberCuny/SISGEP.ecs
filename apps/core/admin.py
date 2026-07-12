@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Role, User, UserRole, OrganizationalUnit, Category, ActivityType, ARC, WorkObjective, MeasurementCriterion, Guideline, ObjectPermission, EmailConfig, SystemConfig
+from .models import Role, User, UserRole, OrganizationalUnit, Category, ActivityType, ARC, WorkObjective, MeasurementCriterion, Guideline, EmailConfig, SystemConfig
 
 
 @admin.register(Role)
@@ -77,17 +77,6 @@ class GuidelineAdmin(admin.ModelAdmin):
     list_display = ['name']
     search_fields = ['name']
     ordering = ['name']
-
-
-@admin.register(ObjectPermission)
-class ObjectPermissionAdmin(admin.ModelAdmin):
-    list_display = ['user', 'permission_type', 'object_type', 'object_id', 'granted_by', 'created_at']
-    list_filter = ['permission_type', 'object_type']
-    search_fields = ['user__username']
-    readonly_fields = ['created_at']
-    autocomplete_fields = ['user', 'granted_by']
-
-
 @admin.register(EmailConfig)
 class EmailConfigAdmin(admin.ModelAdmin):
     list_display = ['host', 'port', 'use_tls', 'use_ssl', 'username', 'default_from']

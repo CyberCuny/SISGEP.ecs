@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import api from '../services/api';
 import { useTranslation } from 'react-i18next';
+import { Users } from 'lucide-react';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 const icons = {
   dashboard: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
@@ -27,6 +29,13 @@ const icons = {
 };
 
 function NavIcon({ name }) {
+  if (name === 'users') {
+    return (
+      <span className="nav-icon">
+        <Users size={20} />
+      </span>
+    );
+  }
   return (
     <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d={icons[name] || icons.dashboard} />
@@ -102,15 +111,20 @@ export default function Layout() {
 
   const toggleTheme = useCallback(() => setDarkMode(prev => !prev), []);
 
-  const navGroups = useMemo(() => [
-    { label: t('nav.group.principal'), items: [{ path: '/', label: t('nav.dashboard'), icon: 'dashboard' }] },
-    { label: t('nav.group.gestion'), items: [{ path: '/activities', label: t('nav.activities'), icon: 'activities' }, { path: '/schedule', label: t('nav.schedule'), icon: 'schedule' }, { path: '/guidelines', label: t('nav.guidelines'), icon: 'catalog' }] },
-    { label: t('nav.group.calendarios'), items: [{ path: '/calendar', label: t('nav.calendar'), icon: 'calendar' }, { path: '/calendar-individual', label: t('nav.calendar_individual'), icon: 'individual' }, { path: '/calendar-annual', label: t('nav.calendar_annual'), icon: 'annual' }] },
-    { label: t('nav.group.monitoreo'), items: [{ path: '/compliance', label: t('nav.compliance'), icon: 'compliance' }, { path: '/approvals', label: t('nav.approvals'), icon: 'approvals' }, { path: '/approved-plans', label: t('nav.approved_plans'), icon: 'approvals' }] },
-    { label: t('nav.group.comunicacion'), items: [{ path: '/messages', label: t('nav.messages'), icon: 'messages' }, { path: '/notifications', label: t('nav.notifications'), icon: 'notifications' }] },
-    { label: t('nav.group.administracion'), items: [{ path: '/units', label: t('nav.units'), icon: 'units' }, { path: '/users', label: t('nav.users'), icon: 'users' }, { path: '/catalog', label: t('nav.catalog'), icon: 'catalog' }, { path: '/permissions', label: t('nav.permissions'), icon: 'audit' }, { path: '/email-config', label: t('nav.email_config'), icon: 'messages' }, { path: '/system-config', label: t('nav.system_config'), icon: 'catalog' }] },
-    { label: t('nav.group.datos'), items: [{ path: '/reports', label: t('nav.reports'), icon: 'reports' }, { path: '/import', label: t('nav.import'), icon: 'import' }, { path: '/work-days', label: t('nav.work_days'), icon: 'workdays' }, { path: '/audit-log', label: t('nav.audit_log'), icon: 'audit' }, { path: '/backups', label: t('nav.backups'), icon: 'schedule' }] },
-  ], [t]);
+  const navGroups = useMemo(() => {
+    const canAdmin = user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR]);
+    const canManage = canAdmin || hasAnyRole(user, [ROLES.APPROVER, ROLES.PLANNER]);
+    const groups = [
+      { label: t('nav.group.principal'), items: [{ path: '/', label: t('nav.dashboard'), icon: 'dashboard' }] },
+      { label: t('nav.group.gestion'), items: [{ path: '/activities', label: t('nav.activities'), icon: 'activities' }, { path: '/schedule', label: t('nav.schedule'), icon: 'schedule' }, { path: '/guidelines', label: t('nav.guidelines'), icon: 'catalog' }] },
+      { label: t('nav.group.calendarios'), items: [{ path: '/calendar', label: t('nav.calendar'), icon: 'calendar' }, { path: '/calendar-individual', label: t('nav.calendar_individual'), icon: 'individual' }, { path: '/calendar-annual', label: t('nav.calendar_annual'), icon: 'annual' }] },
+      { label: t('nav.group.monitoreo'), items: [{ path: '/compliance', label: t('nav.compliance'), icon: 'compliance' }, { path: '/approvals', label: t('nav.approvals'), icon: 'approvals' }, { path: '/approved-plans', label: t('nav.approved_plans'), icon: 'approvals' }] },
+      { label: t('nav.group.comunicacion'), items: [{ path: '/messages', label: t('nav.messages'), icon: 'messages' }, { path: '/notifications', label: t('nav.notifications'), icon: 'notifications' }] },
+      ...(canAdmin ? [{ label: t('nav.group.administracion'), items: [{ path: '/units', label: t('nav.units'), icon: 'units' }, { path: '/users', label: t('nav.users'), icon: 'users' }, { path: '/roles', label: t('nav.roles'), icon: 'users' }, { path: '/catalog', label: t('nav.catalog'), icon: 'catalog' }, { path: '/email-config', label: t('nav.email_config'), icon: 'messages' }, { path: '/system-config', label: t('nav.system_config'), icon: 'catalog' }] }] : []),
+      ...(canManage ? [{ label: t('nav.group.datos'), items: [{ path: '/reports', label: t('nav.reports'), icon: 'reports' }, { path: '/import', label: t('nav.import'), icon: 'import' }, { path: '/work-days', label: t('nav.work_days'), icon: 'workdays' }, { path: '/audit-log', label: t('nav.audit_log'), icon: 'audit' }, ...(canAdmin ? [{ path: '/backups', label: t('nav.backups'), icon: 'schedule' }] : [])] }] : []),
+    ];
+    return groups;
+  }, [t, user]);
 
   const fetchNotif = useCallback(() => {
     api.get('/notifications/unread_count/').then(r => setNotifCount(r.data.count || 0)).catch(() => console.warn('Failed to fetch notification count'));

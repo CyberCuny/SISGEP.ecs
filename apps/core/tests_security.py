@@ -112,6 +112,31 @@ class AssignRolesPermissionTest(TestCase):
         res = self.client.post('/api/v1/users/assign_roles/', {'user_ids': [self.user.id], 'role_ids': [self.role.id]}, format='json')
         self.assertEqual(res.status_code, 200)
 
+    def test_normal_user_cannot_remove_roles(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.post('/api/v1/users/remove_roles/', {'user_ids': [self.user.id], 'role_ids': [self.role.id]}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_admin_can_remove_roles(self):
+        from apps.core.models import UserRole
+        UserRole.objects.create(user=self.user, role=self.role)
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.post('/api/v1/users/remove_roles/', {'user_ids': [self.user.id], 'role_ids': [self.role.id]}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(UserRole.objects.filter(user=self.user, role=self.role).exists())
+
+    def test_assign_roles_validation_nonexistent(self):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.post('/api/v1/users/assign_roles/', {'user_ids': [9999], 'role_ids': [self.role.id]}, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('no encontrados', res.data.get('error', ''))
+
+    def test_remove_roles_validation_nonexistent(self):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.post('/api/v1/users/remove_roles/', {'user_ids': [self.user.id], 'role_ids': [9999]}, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('no encontrados', res.data.get('error', ''))
+
 
 class EmailAsyncTest(TestCase):
     def test_send_email_async_does_not_block(self):

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Search, Trash2, Star, Minus, UserCheck, X, Eye, Edit3 } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -12,9 +13,12 @@ import { SkeletonTable } from '../components/Skeleton';
 import useDebounce from '../hooks/useDebounce';
 import useScrollShadow from '../hooks/useScrollShadow';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Activities() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR]);
   useDocumentTitle(t('page.activities.title'));
   const [activities, setActivities] = useState([]);
   const today = new Date();
@@ -153,9 +157,9 @@ export default function Activities() {
       ]} />
       <div className="page-header">
         <h1>{t('page.activities.title')}</h1>
-        <button className="btn btn-icon btn-primary" onClick={() => navigate('/activities/new')} title={t('page.activities.new')}>
+        {canManage && <button className="btn btn-icon btn-primary" onClick={() => navigate('/activities/new')} title={t('page.activities.new')}>
           <Plus size={16} />
-        </button>
+        </button>}
       </div>
       <div className="card">
         <div className="toolbar">
@@ -188,7 +192,7 @@ export default function Activities() {
           </button>
         </div>
 
-        {selected.size > 0 && (
+        {selected.size > 0 && canManage && (
           <div className="batch-toolbar">
             <span className="batch-count">{t('page.activities.selected', { count: selected.size })}</span>
             <button className="btn btn-icon btn-sm btn-danger" disabled={batchLoading} onClick={() => setBatchConfirm('delete')} title={t('page.activities.batch_delete')}><Trash2 size={14} /></button>
@@ -207,9 +211,9 @@ export default function Activities() {
               </span>
               <h4>{t('page.activities.empty')}</h4>
               <p>{t('page.activities.empty_hint')}</p>
-              <button className="btn btn-icon btn-primary btn-sm mt-4" onClick={() => navigate('/activities/new')} title={t('page.activities.new')}>
+              {canManage && <button className="btn btn-icon btn-primary btn-sm mt-4" onClick={() => navigate('/activities/new')} title={t('page.activities.new')}>
                 <Plus size={14} />
-              </button>
+              </button>}
             </div>
           </div>
         ) : (
@@ -241,8 +245,8 @@ export default function Activities() {
                     </td>
                     <td>
                       <button className="btn btn-icon btn-sm btn-secondary" onClick={() => navigate(`/activities/${act.id}`)} title={t('page.activities.view')}><Eye size={14} /></button>
-                      <button className="btn btn-icon btn-sm btn-primary" onClick={() => navigate(`/activities/${act.id}/edit`)} title={t('page.activities.edit')}><Edit3 size={14} /></button>
-                      <button className="btn btn-icon btn-sm btn-danger" onClick={() => setConfirmDelete(act)} title={t('page.activities.delete')}><Trash2 size={14} /></button>
+                      {canManage && <button className="btn btn-icon btn-sm btn-primary" onClick={() => navigate(`/activities/${act.id}/edit`)} title={t('page.activities.edit')}><Edit3 size={14} /></button>}
+                      {canManage && <button className="btn btn-icon btn-sm btn-danger" onClick={() => setConfirmDelete(act)} title={t('page.activities.delete')}><Trash2 size={14} /></button>}
                     </td>
                   </tr>
                 ))}

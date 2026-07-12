@@ -8,7 +8,7 @@ User = get_user_model()
 class CoreModelsTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='test', password='test123', display_name='Test User')
-        self.role = Role.objects.create(name='Planificador')
+        self.role, _ = Role.objects.get_or_create(name='Planificador')
         self.cat = Category.objects.create(name='Capacitación')
         self.uo = OrganizationalUnit.objects.create(name='Dirección')
 

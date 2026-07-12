@@ -11,24 +11,20 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from apps.core.models import (User, Role, UserRole, OrganizationalUnit, Category,
                               ActivityType, ARC, WorkObjective, MeasurementCriterion, Guideline,
-                              ObjectPermission, EmailConfig, SystemConfig)
+                              EmailConfig, SystemConfig)
 from apps.core.serializers import (RoleSerializer, UserSerializer, UserCreateSerializer,
                                     OrganizationalUnitSerializer,
                                     CategorySerializer, ActivityTypeSerializer, ARCSerializer,
                                     WorkObjectiveSerializer, MeasurementCriterionSerializer,
-                                    GuidelineSerializer, ObjectPermissionSerializer,
+                                    GuidelineSerializer,
                                     EmailConfigSerializer, SystemConfigSerializer)
 from apps.core.utils import log_action, compute_diff
 from apps.core.throttles import WriteThrottle, AuthThrottle
+from apps.core.permissions import IsAdmin, has_any_role, ROLE_DIRECTOR
 from django.shortcuts import get_object_or_404
 from django.db import connection
 
 logger = logging.getLogger(__name__)
-
-
-class IsAdmin(IsAuthenticated):
-    def has_permission(self, request, view):
-        return super().has_permission(request, view) and request.user.is_staff
 
 
 
@@ -158,11 +154,11 @@ class UserViewSet(viewsets.ModelViewSet):
         return super().get_throttles()
 
     def get_permissions(self):
-        if self.action in ['login', 'create', 'register', 'forgot_password', 'reset_password_confirm', 'verify_email']:
+        if self.action in ['login', 'register', 'forgot_password', 'reset_password_confirm', 'verify_email']:
             return [AllowAny()]
         if self.action in ['me', 'me_update', 'logout', 'list', 'retrieve', 'roles', 'ldap_list']:
             return [IsAuthenticated()]
-        if self.action in ['assign_roles', 'remove_roles']:
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'assign_roles', 'remove_roles', 'reset_password']:
             return [IsAdmin()]
         return [IsAuthenticated()]
 
@@ -370,9 +366,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 msg.append(f'Roles no encontrados: {sorted(missing_roles)}')
             return Response({'error': '; '.join(msg)}, status=400)
         role_names = [r.name for r in existing_roles]
+        batch = [UserRole(user=u, role=r) for u in existing_users for r in existing_roles]
+        UserRole.objects.bulk_create(batch, ignore_conflicts=True)
         for u in existing_users:
-            for r in existing_roles:
-                UserRole.objects.get_or_create(user=u, role=r)
             if u != request.user:
                 _create_notification(u, f'Se le asignaron roles: {", ".join(role_names)}', 'system',
                                      related_object_id=u.pk, related_object_type='User')
@@ -383,11 +379,23 @@ class UserViewSet(viewsets.ModelViewSet):
     def remove_roles(self, request):
         user_ids = request.data.get('user_ids', [])
         role_ids = request.data.get('role_ids', [])
-        if not User.objects.filter(id__in=user_ids).count() == len(user_ids):
-            return Response({'error': 'Uno o más usuarios no existen'}, status=400)
-        if not Role.objects.filter(id__in=role_ids).count() == len(role_ids):
-            return Response({'error': 'Uno o más roles no existen'}, status=400)
+        existing_users = User.objects.filter(id__in=user_ids)
+        existing_roles = Role.objects.filter(id__in=role_ids)
+        missing_users = set(user_ids) - set(existing_users.values_list('id', flat=True))
+        missing_roles = set(role_ids) - set(existing_roles.values_list('id', flat=True))
+        if missing_users or missing_roles:
+            msg = []
+            if missing_users:
+                msg.append(f'Usuarios no encontrados: {sorted(missing_users)}')
+            if missing_roles:
+                msg.append(f'Roles no encontrados: {sorted(missing_roles)}')
+            return Response({'error': '; '.join(msg)}, status=400)
+        role_names = [r.name for r in existing_roles]
         UserRole.objects.filter(user_id__in=user_ids, role_id__in=role_ids).delete()
+        for u in existing_users:
+            if u != request.user:
+                _create_notification(u, f'Se le removieron roles: {", ".join(role_names)}', 'system',
+                                     related_object_id=u.pk, related_object_type='User')
         log_action(request, 'Rol', f'Removió roles {role_ids} de usuarios {user_ids}')
         return Response({'ok': True})
 
@@ -447,6 +455,7 @@ class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
     ordering = ['id']
+    permission_classes = [IsAdmin]
 
     def perform_create(self, serializer):
         super().perform_create(serializer)
@@ -754,20 +763,6 @@ class GuidelineViewSet(CatalogCacheMixin, viewsets.ModelViewSet):
         instance.delete()
 
 
-class ObjectPermissionViewSet(viewsets.ModelViewSet):
-    queryset = ObjectPermission.objects.all()
-    serializer_class = ObjectPermissionSerializer
-    filterset_fields = ['user', 'object_type', 'object_id', 'permission_type']
-
-    def perform_create(self, serializer):
-        serializer.save(granted_by=self.request.user)
-        log_action(self.request, 'PermisoObjeto', f'Creó permiso: {serializer.instance}')
-
-    def perform_destroy(self, instance):
-        log_action(self.request, 'PermisoObjeto', f'Eliminó permiso: {instance}')
-        instance.delete()
-
-
 class BackupViewSet(viewsets.ViewSet):
     permission_classes = [IsAdmin]
 
@@ -838,12 +833,7 @@ class BackupViewSet(viewsets.ViewSet):
 class EmailConfigViewSet(viewsets.ModelViewSet):
     queryset = EmailConfig.objects.all()
     serializer_class = EmailConfigSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if not self.request.user.is_staff:
-            return qs.none()
-        return qs
+    permission_classes = [IsAdmin]
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -886,12 +876,7 @@ def _cache_email_config(instance):
 class SystemConfigViewSet(viewsets.ModelViewSet):
     queryset = SystemConfig.objects.all()
     serializer_class = SystemConfigSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if not self.request.user.is_staff:
-            return qs.none()
-        return qs
+    permission_classes = [IsAdmin]
 
     def perform_create(self, serializer):
         super().perform_create(serializer)
@@ -943,7 +928,7 @@ def global_search(request):
 
     def _visible_activities():
         qs = Activity.objects.filter(description__icontains=q)
-        if not user.is_staff:
+        if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
             uos = OrganizationalUnit.objects.filter(responsible=user)
             mapped = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
             qs = qs.filter(Q(organizational_unit__in=uos) | Q(id__in=mapped))
@@ -953,7 +938,7 @@ def global_search(request):
         qs = SchedulePeriod.objects.filter(
             Q(description__icontains=q) | Q(observation__icontains=q)
         ).select_related('activity')
-        if not user.is_staff:
+        if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
             uos = OrganizationalUnit.objects.filter(responsible=user)
             mapped = SchedulePeriodMapping.objects.filter(user=user).values_list('schedule_period_id', flat=True)
             mapped_acts = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)

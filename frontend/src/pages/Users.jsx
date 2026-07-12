@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, Users as UsersIcon, Edit3, Key, Trash2, UserPlus, X, Check } from 'lucide-react';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Users() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canAdmin = user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR]);
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [allRoles, setAllRoles] = useState([]);
@@ -78,15 +82,26 @@ export default function Users() {
   };
 
   const handleAssignRole = async (userId, roleId, assign) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== userId) return u;
+      const currentRoles = u.roles || [];
+      const newRoles = assign
+        ? [...currentRoles, allRoles.find(r => r.id === roleId)].filter(Boolean)
+        : currentRoles.filter(r => r.id !== roleId);
+      return { ...u, roles: newRoles };
+    }));
     try {
       if (assign) {
         await api.post('/users/assign_roles/', { user_ids: [userId], role_ids: [roleId] });
       } else {
         await api.post('/users/remove_roles/', { user_ids: [userId], role_ids: [roleId] });
       }
-      fetchData();
       toast.success(assign ? t('toast.role_assigned') : t('toast.role_removed'));
-    } catch { toast.error(t('toast.role_error')); }
+      fetchData();
+    } catch {
+      toast.error(t('toast.role_error'));
+      fetchData();
+    }
   };
 
   const handleImportLDAP = async (ldapUser) => {
@@ -233,7 +248,7 @@ export default function Users() {
             <thead>
               <tr>
                 <th>{t('page.users.table.user')}</th><th>{t('page.users.table.name')}</th><th>{t('page.users.table.email')}</th><th>{t('page.users.table.position')}</th>
-                <th>{t('page.users.table.roles')}</th><th>{t('page.users.table.approver')}</th><th>{t('page.users.table.actions')}</th>
+                {canAdmin && <th>{t('page.users.table.roles')}</th>}<th>{t('page.users.table.approver')}</th>{canAdmin && <th>{t('page.users.table.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -243,7 +258,7 @@ export default function Users() {
                   <td>{u.display_name}</td>
                   <td>{u.email}</td>
                   <td>{u.position || '-'}</td>
-                  <td>
+                  {canAdmin && <td>
                     {allRoles.map(r => (
                       <label key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', marginRight: '0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}>
                         <input type="checkbox" checked={(u.roles || []).some(ur => ur.id === r.id)}
@@ -251,17 +266,17 @@ export default function Users() {
                         {r.name}
                       </label>
                     ))}
-                  </td>
+                  </td>}
                   <td>{u.plan_approver_name || '-'}</td>
-                  <td>
+                  {canAdmin && <td>
                     <button className="btn btn-icon btn-sm btn-primary" onClick={() => { setEditingUser(u.id); setForm({ username: u.username, display_name: u.display_name, email: u.email, password: '', position: u.position || '', plan_approver: u.plan_approver || '', is_disabled: u.is_disabled || false }); setShowForm(true); }} title={t('common.edit')}><Edit3 size={14} /></button>
                     <button className="btn btn-icon btn-sm btn-warning" onClick={() => handleResetPassword(u.id)} title={t('action.reset_password')}><Key size={14} /></button>
                     <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(u.id)} title={t('common.delete')}><Trash2 size={14} /></button>
-                  </td>
+                  </td>}
                 </tr>
               ))}
               {users.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">{t('page.users.empty')}</td></tr>
+                <tr><td colSpan={canAdmin ? 7 : 4} className="empty-state">{t('page.users.empty')}</td></tr>
               )}
             </tbody>
           </table>

@@ -5,9 +5,11 @@ from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from apps.core.models import OrganizationalUnit, Guideline
 from apps.core.utils import log_action, compute_diff
 from apps.core.views import _create_notification
+from apps.core.permissions import IsAdmin, HasRole, has_any_role, ROLE_EXECUTOR, ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR
 from apps.activities.models import Activity, ActivityGuideline, ActivityOrgUnit, ActivityMapping, UnfulfilledActivity, ActivityAttachment, ActivityComment
 from apps.activities.serializers import (ActivitySerializer, ActivityGuidelineSerializer,
                                           ActivityOrgUnitSerializer, ActivityMappingSerializer,
@@ -24,18 +26,30 @@ class ActivityViewSet(viewsets.ModelViewSet):
     search_fields = ['description', 'place', 'responsible', 'participants']
     filterset_fields = ['category', 'organizational_unit', 'arc', 'activity_type', 'is_important', 'is_general']
 
+    def get_permissions(self):
+        if self.action in ['pending_approval', 'approve', 'reject', 'approve_subunit_activity', 'approve_subunit_cronograms']:
+            return [HasRole(ROLE_APPROVER, ROLE_DIRECTOR)]
+        if self.action in ['create', 'update', 'partial_update', 'batch_delete', 'batch_update', 'batch_assign_unit', 'assign_to_units', 'map_to_user', 'distribute_to_subunits', 'distribute_subunit_cronograms', 'import_activities']:
+            return [HasRole(ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR)]
+        if self.action in ['destroy']:
+            return [IsAdmin()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if not user.is_staff:
+        if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
             uos = OrganizationalUnit.objects.filter(
                 Q(responsible=user) | Q(id__in=OrganizationalUnit.objects.filter(responsible=user).values('id'))
             )
             mapped_act_ids = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
-            qs = qs.filter(
-                Q(organizational_unit__in=uos) |
-                Q(id__in=mapped_act_ids)
-            )
+            if has_any_role(user, [ROLE_EXECUTOR]) and not has_any_role(user, [ROLE_PLANNER, ROLE_APPROVER]):
+                qs = qs.filter(id__in=mapped_act_ids)
+            else:
+                qs = qs.filter(
+                    Q(organizational_unit__in=uos) |
+                    Q(id__in=mapped_act_ids)
+                )
         if self.action == 'list':
             desde = self.request.query_params.get('FechaDesde')
             hasta = self.request.query_params.get('FechaHasta')

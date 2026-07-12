@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from apps.core.models import User, OrganizationalUnit
 from apps.core.utils import log_action, compute_diff
 from apps.core.views import _create_notification
+from apps.core.permissions import IsAdmin, HasRole, has_any_role, ROLE_EXECUTOR, ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR
 from apps.activities.models import ActivityMapping
 from apps.schedule.models import (SchedulePeriod, SchedulePeriodMapping,
                                   ScheduleOrgUnit, WorkDay, ApprovedPlan, ScheduleComment)
@@ -39,18 +40,28 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
     search_fields = ['description', 'observation']
     filterset_fields = ['activity', 'status', 'start_date', 'end_date', 'is_extraplan', 'has_incidence']
 
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return [HasRole(ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR)]
+        if self.action in ['destroy']:
+            return [IsAdmin()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if not user.is_staff:
+        if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
             uos = OrganizationalUnit.objects.filter(responsible=user)
             mapped_period_ids = SchedulePeriodMapping.objects.filter(user=user).values_list('schedule_period_id', flat=True)
             mapped_act_ids = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
-            qs = qs.filter(
-                Q(activity__organizational_unit__in=uos) |
-                Q(id__in=mapped_period_ids) |
-                Q(activity_id__in=mapped_act_ids)
-            )
+            if has_any_role(user, [ROLE_EXECUTOR]) and not has_any_role(user, [ROLE_PLANNER, ROLE_APPROVER]):
+                qs = qs.filter(Q(id__in=mapped_period_ids) | Q(activity_id__in=mapped_act_ids))
+            else:
+                qs = qs.filter(
+                    Q(activity__organizational_unit__in=uos) |
+                    Q(id__in=mapped_period_ids) |
+                    Q(activity_id__in=mapped_act_ids)
+                )
         return qs.distinct()
 
     def perform_create(self, serializer):
@@ -77,7 +88,7 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         user = self.request.user
         activity = instance.activity
-        if user.is_staff or activity.organizational_unit and activity.organizational_unit.responsible == user:
+        if user.is_staff or has_any_role(user, [ROLE_DIRECTOR]) or activity.organizational_unit and activity.organizational_unit.responsible == user:
             log_action(self.request, 'CronogramaPeriodo', f'Eliminó periodo {instance.id}')
             instance.delete()
         else:

@@ -27,11 +27,11 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Backup = lazy(() => import('./pages/Backup'));
-const ObjectPermissions = lazy(() => import('./pages/ObjectPermissions'));
 const EmailConfig = lazy(() => import('./pages/EmailConfig'));
 const SystemConfig = lazy(() => import('./pages/SystemConfig'));
 const Guidelines = lazy(() => import('./pages/Guidelines'));
 const ApprovedPlans = lazy(() => import('./pages/ApprovedPlans'));
+const Roles = lazy(() => import('./pages/Roles'));
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
@@ -66,9 +66,9 @@ export const protectedRoutes = [
   { path: '/notifications', element: <Notifications /> },
   { path: '/messages', element: <Messages /> },
   { path: '/backups', element: <Backup /> },
-  { path: '/permissions', element: <ObjectPermissions /> },
   { path: '/guidelines', element: <Guidelines /> },
   { path: '/approved-plans', element: <ApprovedPlans /> },
+  { path: '/roles', element: <Roles /> },
   { path: '/email-config', element: <EmailConfig /> },
   { path: '/system-config', element: <SystemConfig /> },
 ];

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (User, Role, UserRole, OrganizationalUnit, Category,
                      ActivityType, ARC, WorkObjective, MeasurementCriterion, Guideline,
-                     ObjectPermission, EmailConfig, SystemConfig)
+                     EmailConfig, SystemConfig)
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -95,16 +95,6 @@ class GuidelineSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guideline
         fields = '__all__'
-
-
-class ObjectPermissionSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.display_name', read_only=True)
-    granted_by_name = serializers.CharField(source='granted_by.display_name', read_only=True)
-
-    class Meta:
-        model = ObjectPermission
-        fields = '__all__'
-        read_only_fields = ['granted_by', 'created_at']
 
 
 class EmailConfigSerializer(serializers.ModelSerializer):

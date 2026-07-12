@@ -37,6 +37,15 @@ class User(AbstractUser):
         verbose_name = 'Usuario'
         verbose_name_plural = 'Usuarios'
 
+    def has_role(self, role_name):
+        from apps.core.permissions import has_role as _has_role
+        return _has_role(self, role_name)
+
+    @property
+    def highest_role(self):
+        from apps.core.permissions import get_highest_role
+        return get_highest_role(self)
+
     def __str__(self):
         return self.display_name or self.username
 
@@ -147,24 +156,6 @@ class Guideline(models.Model):
 
     def __str__(self):
         return self.name
-
-
-class ObjectPermission(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='object_permissions', db_column='id_usuario')
-    permission_type = models.CharField(max_length=50, verbose_name='Tipo Permiso')
-    object_type = models.CharField(max_length=100, verbose_name='Tipo Objeto')
-    object_id = models.IntegerField(verbose_name='ID Objeto')
-    granted_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='granted_permissions')
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'permiso_objeto'
-        unique_together = ('user', 'permission_type', 'object_type', 'object_id')
-        verbose_name = 'Permiso por Objeto'
-        verbose_name_plural = 'Permisos por Objeto'
-
-    def __str__(self):
-        return f'{self.user.username} - {self.permission_type} - {self.object_type}:{self.object_id}'
 
 
 logger = logging.getLogger(__name__)

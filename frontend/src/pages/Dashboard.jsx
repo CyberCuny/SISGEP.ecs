@@ -5,6 +5,7 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { hasAnyRole, ROLES } from '../utils/roles';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { SkeletonCard } from '../components/Skeleton';
@@ -51,7 +52,8 @@ export default function Dashboard() {
     const { signal } = abortController;
     setLoading(true);
 
-    const pendPromise = user?.is_staff
+    const canViewAll = user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR]);
+    const pendPromise = canViewAll
       ? api.get('/activity-org-units/', { signal }).catch(() => ({ data: { count: 0 } }))
       : Promise.resolve({ data: { count: 0 } });
 
@@ -62,7 +64,7 @@ export default function Dashboard() {
 
     Promise.all([
       api.get('/activities/', { signal }).catch(() => ({ data: { count: 0 } })),
-      (user?.is_staff ? api.get('/users/?page_size=1', { signal }) : Promise.resolve({ data: { count: 0 } })),
+      (canViewAll ? api.get('/users/?page_size=1', { signal }) : Promise.resolve({ data: { count: 0 } })),
       api.get('/organizational-units/', { signal }).catch(() => ({ data: { count: 0 } })),
       pendPromise,
       api.get('/schedule/periods/compliance_stats/', { signal, params: { desde, hasta } }).catch(() => ({ data: {} })),
@@ -133,9 +135,9 @@ export default function Dashboard() {
         ) : (
           <>
             <StatCard icon={icons.activities} label={t('page.dashboard.activities')} value={stats.activities} accent="blue" />
-            {user?.is_staff && <StatCard icon={icons.pending} label={t('page.dashboard.pending_approval')} value={stats.pending} accent="orange" />}
+            {(user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR])) && <StatCard icon={icons.pending} label={t('page.dashboard.pending_approval')} value={stats.pending} accent="orange" />}
             <StatCard icon={icons.compliance} label={t('page.dashboard.completed')} value={stats.cumplido} accent="green" />
-            {user?.is_staff && <StatCard icon={icons.units} label={t('page.dashboard.units')} value={stats.units} accent="cyan" />}
+            {(user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR])) && <StatCard icon={icons.units} label={t('page.dashboard.units')} value={stats.units} accent="cyan" />}
           </>
         )}
       </div>

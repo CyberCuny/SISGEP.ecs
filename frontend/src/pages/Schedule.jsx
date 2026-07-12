@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
@@ -16,9 +17,12 @@ import useAutoResize from '../hooks/useAutoResize';
 import useKeyboardShortcut from '../hooks/useKeyboardShortcut';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { Plus, X, Check, Edit3, Trash2 } from 'lucide-react';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Schedule() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR]);
   useDocumentTitle(t('page.schedule.title'));
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +70,7 @@ export default function Schedule() {
 
   useKeyboardShortcut('Escape', () => { if (showForm) closeForm(); });
   useKeyboardShortcut('Escape', () => { if (confirmDelete) setConfirmDelete(null); });
-  useKeyboardShortcut('n', () => { if (!showForm) { const defaults = { activity: '', start_date: '', end_date: '', start_time: '', end_time: '', description: '', observation: '', status: '', is_extraplan: false, has_incidence: false, color: '#1a237e' }; setForm(defaults); formSnapshot.current = { ...defaults }; setShowForm(true); }}, { ctrl: true });
+  useKeyboardShortcut('n', () => { if (canManage && !showForm) { const defaults = { activity: '', start_date: '', end_date: '', start_time: '', end_time: '', description: '', observation: '', status: '', is_extraplan: false, has_incidence: false, color: '#1a237e' }; setForm(defaults); formSnapshot.current = { ...defaults }; setShowForm(true); }}, { ctrl: true });
 
   const handleDelete = async (id) => {
     setConfirmDelete({ id });
@@ -143,9 +147,9 @@ export default function Schedule() {
       ]} />
       <div className="page-header">
         <h1>{t('page.schedule.title')}</h1>
-        <button className="btn btn-icon btn-primary" onClick={() => { const defaults = { activity: '', start_date: '', end_date: '', start_time: '', end_time: '', description: '', observation: '', status: '', is_extraplan: false, has_incidence: false, color: '#1a237e' }; setForm(defaults); formSnapshot.current = { ...defaults }; setShowForm(true); }} title={t('page.schedule.new')}>
+        {canManage && <button className="btn btn-icon btn-primary" onClick={() => { const defaults = { activity: '', start_date: '', end_date: '', start_time: '', end_time: '', description: '', observation: '', status: '', is_extraplan: false, has_incidence: false, color: '#1a237e' }; setForm(defaults); formSnapshot.current = { ...defaults }; setShowForm(true); }} title={t('page.schedule.new')}>
           <Plus size={16} />
-        </button>
+        </button>}
       </div>
 
       {showForm && (
@@ -260,8 +264,8 @@ export default function Schedule() {
                           <option value="INCUMPLIDO">{t('badge.incumplido')}</option>
                         </select>
                       ) : (
-                        <span className={`badge ${p.status === 'CUMPLIDO' ? 'badge-success' : p.status === 'INCUMPLIDO' ? 'badge-danger' : 'badge-neutral'} inline-edit-trigger`}
-                          onClick={() => setEditingStatus(p.id)}>
+                        <span className={`badge ${p.status === 'CUMPLIDO' ? 'badge-success' : p.status === 'INCUMPLIDO' ? 'badge-danger' : 'badge-neutral'} ${canManage ? 'inline-edit-trigger' : ''}`}
+                          onClick={() => canManage && setEditingStatus(p.id)}>
                           {p.status || 'PENDIENTE'}
                         </span>
                       )}
@@ -269,8 +273,8 @@ export default function Schedule() {
                     <td>{p.is_extraplan ? <span className="badge badge-warning">{t('badge.yes')}</span> : t('badge.no')}</td>
                     <td>{p.has_incidence ? <span className="badge badge-danger">{t('badge.yes')}</span> : t('badge.no')}</td>
                     <td>
-                      <button className="btn btn-icon btn-sm btn-primary" onClick={() => openEdit(p)} title={t('common.edit')}><Edit3 size={14} /></button>
-                      <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(p.id)} title={t('common.delete')}><Trash2 size={14} /></button>
+                      {canManage && <button className="btn btn-icon btn-sm btn-primary" onClick={() => openEdit(p)} title={t('common.edit')}><Edit3 size={14} /></button>}
+                      {canManage && <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(p.id)} title={t('common.delete')}><Trash2 size={14} /></button>}
                     </td>
                   </tr>
                 ))}
