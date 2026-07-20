@@ -1,26 +1,38 @@
-# Plan de Trabajo
+# SISGEP — Sistema de Gestión de Planes de Trabajo
 
-Sistema de gestión de planes de trabajo con control de acceso por roles, visibilidad por unidades organizativas, cronogramas, aprobaciones y reportes.
+Sistema completo de gestión de planes de trabajo con control de acceso por roles (jerárquicos), visibilidad por unidades organizativas (UO), cronogramas, flujos de aprobación/rechazo, distribución a subunidades, calendarios, reportes, notificaciones en tiempo real y auditoría.
 
 ## Stack
 
-- **Frontend**: React 19, Vite 7, react-router-dom 7
-- **Backend**: Django 5, DRF 3.15, SimpleJWT, Channels
-- **BD**: PostgreSQL 16
-- **Cache/WS**: Redis 7
-- **Proxy**: Nginx
+| Capa | Tecnología |
+|------|-----------|
+| **Frontend** | React 19.1, Vite 7, react-router-dom 7.5, Lucide |
+| **Backend** | Django 5.1+, DRF 3.15+, SimpleJWT, Channels |
+| **Base de datos** | PostgreSQL 16 (prod), SQLite (testing) |
+| **Cache / WebSocket** | Redis 7 |
+| **Proxy** | Nginx |
+| **Contenedores** | Docker + docker-compose |
+
+## Arquitectura de Roles (jerarquía ascendente)
+
+| Rol | Permisos |
+|-----|----------|
+| **Ejecutor** | Ver actividades asignadas, cambiar estado de periodos del cronograma, comentarios/adjuntos |
+| **Planificador** | CRUD actividades, crear/editar cronogramas, importar, asignar a unidades, distribuir a subunidades |
+| **Aprobador** | Aprobar/rechazar actividades y cronogramas de su UO (no crea ni edita) |
+| **Directivo** | Planificador + Aprobador + CRUD usuarios; visibilidad completa de su UO |
+| **Admin (staff)** | Acceso total incluyendo gestión de roles, config del sistema, backup, email |
 
 ## Quick Start (Docker)
 
 ```bash
 cp .env.example .env
-# edit .env with your secrets
-
+# editar .env con tus secretos
 docker compose up -d
 ```
 
-Luego abrir `http://localhost`.  
-Seed data opcional: `docker compose exec backend python manage.py seed_data`
+Abrir `http://localhost`.  
+Seed data (opcional): `docker compose exec backend python manage.py seed_data`
 
 ## Desarrollo sin Docker
 
@@ -30,6 +42,8 @@ Seed data opcional: `docker compose exec backend python manage.py seed_data`
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
+set DJANGO_SECRET_KEY=dev-key
+set DJANGO_DEBUG=True
 python manage.py migrate
 python manage.py runserver
 ```
@@ -42,38 +56,67 @@ npm install
 npm run dev
 ```
 
-### Tests
+## Tests
 
 ```bash
-# backend (SQLite, rápido)
-python manage.py test --settings=config.settings_test
+# Backend (54 unit + 10 E2E)
+set DJANGO_SETTINGS_MODULE=config.settings
+set DJANGO_SECRET_KEY=dev-key
+set DJANGO_DEBUG=True
+python -m pytest apps/activities/tests.py apps/core/tests.py apps/communication/tests.py apps/schedule/tests.py apps/logs/tests.py
+python -m pytest apps/core/tests_e2e.py
 
-# frontend
-cd frontend && npm test
+# Frontend (30 tests)
+cd frontend
+npx vitest run
+
+# Build producción
+npx vite build
 ```
+
+## Seed Data
+
+El comando `python manage.py seed_data` (o `docker compose exec backend python manage.py seed_data`) siembra:
+
+- **5 roles**, 9 categorías, 10 tipos de actividad, 4 ARC, 8 objetivos, 8 criterios, 6 lineamientos
+- **30 usuarios** (martin, maria, carlos, ana, luis, ...) con roles asignados
+- **27 unidades organizativas** (6 departamentos con sub-áreas)
+- **29 actividades** con periodos para may-sep 2026
+- Flujos de aprobación/rechazo, distribución a subunidades, asignación a unidades
+- 41 comentarios de cronograma, 19 incumplimientos, 29 comentarios de actividades
+- Planes aprobados, días laborables, 28 mensajes, 60 notificaciones
 
 ## Variables de Entorno
 
-Ver `.env.example` para todas las variables documentadas.
+Ver `.env.example` para todas las variables documentadas. Variables principales:
 
-## Despliegue
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `DJANGO_SECRET_KEY` | Clave secreta de Django | **requerida** |
+| `DJANGO_DEBUG` | Modo debug | `False` |
+| `DJANGO_ALLOWED_HOSTS` | Hosts permitidos | `localhost,127.0.0.1` |
+| `DB_NAME` | Nombre BD | `plantrabajo` |
+| `DB_USER` | Usuario BD | `postgres` |
+| `DB_PASSWORD` | Password BD | `postgres` |
+| `CORS_ALLOWED_ORIGINS` | Orígenes CORS | — |
 
-1. Configurar dominio y DNS apuntando al servidor
-2. `docker compose -f docker-compose.yml up -d`
-3. Agregar HTTPS con reverse proxy (Caddy / Traefik / Nginx)
+## Despliegue Producción
+
+```bash
+# 1. Usar settings de producción
+set DJANGO_SETTINGS_MODULE=config.settings_prod
+
+# 2. Verificar configuración
+python manage.py check --deploy
+
+# 3. Docker deploy
+docker compose -f docker-compose.yml up -d
+```
+
+`settings_prod.py` incluye: HSTS, SSL redirect, cookies seguras, Sentry, Redis cache, SMTP email, logging estructurado, whitenoise para assets estáticos.
 
 ### Backup
 
 ```bash
 ./scripts/backup.sh
 ```
-
-### Roles del Sistema
-
-| Rol | Permisos |
-|-----|----------|
-| Ejecutor | Ver actividades asignadas, actualizar estado de periodos |
-| Planificador | CRUD actividades, crear cronogramas, importar |
-| Aprobador | Aprobar/rechazar actividades y cronogramas de su UO |
-| Directivo | Crear actividades, aprobar, ver todo |
-| Admin/staff | Todo lo anterior + gestión de usuarios y roles |
