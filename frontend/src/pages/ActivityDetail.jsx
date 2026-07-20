@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Edit3, Trash2 } from 'lucide-react';
+import { Edit3, Trash2, Share2, UserPlus, Building2, X, Check } from 'lucide-react';
 import api from '../services/api';
-import { scheduleService } from '../services';
+import { scheduleService, activityService, unitService } from '../services';
 import Breadcrumbs from '../components/Breadcrumbs';
 import HistorySection from '../components/HistorySection';
 import AttachmentsSection from '../components/AttachmentsSection';
@@ -11,16 +11,30 @@ import CommentsSection from '../components/CommentsSection';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Spinner from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
+import Modal from '../components/Modal';
 
 export default function ActivityDetail() {
   const { t } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
+  const canComment = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR, ROLES.EXECUTOR]);
   const [activity, setActivity] = useState(null);
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [distributing, setDistributing] = useState(false);
+  const [showMapUser, setShowMapUser] = useState(false);
+  const [mapUserId, setMapUserId] = useState('');
+  const [mapUsers, setMapUsers] = useState([]);
+  const [showAssignUnits, setShowAssignUnits] = useState(false);
+  const [allUnits, setAllUnits] = useState([]);
+  const [selectedUnitIds, setSelectedUnitIds] = useState([]);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     document.title = t('page.activity_detail.title');
@@ -28,11 +42,69 @@ export default function ActivityDetail() {
     Promise.all([
       api.get(`/activities/${id}/`),
       scheduleService.list({ activity_id: id }),
-    ]).then(([actRes, perRes]) => {
+      api.get('/users/?page_size=500'),
+      unitService.list({ page_size: 500 }),
+    ]).then(([actRes, perRes, usrRes, untRes]) => {
       setActivity(actRes.data);
       setPeriods(perRes.data.results || perRes.data || []);
+      setMapUsers(usrRes.data.results || usrRes.data || []);
+      setAllUnits(untRes.data.results || untRes.data || []);
     }).finally(() => setLoading(false));
   }, [id]);
+
+  const handleDistribute = async () => {
+    setDistributing(true);
+    try {
+      await activityService.distribute({ activity_id: Number(id) });
+      toast.success(t('toast.distributed'));
+    } catch (err) {
+      const detail = err.response?.data?.error || err.message || t('toast.distribute_error');
+      toast.error(detail);
+    }
+    finally { setDistributing(false); }
+  };
+
+  const handleMapUser = async (e) => {
+    e.preventDefault();
+    if (!mapUserId) return;
+    try {
+      await activityService.mapToUser({ activity_id: Number(id), user_id: Number(mapUserId) });
+      toast.success(t('toast.mapped_user'));
+      setShowMapUser(false);
+      setMapUserId('');
+    } catch (err) {
+      const detail = err.response?.data?.error || err.message || t('toast.map_user_error');
+      toast.error(detail);
+    }
+  };
+
+  const openMapUserModal = () => {
+    setMapUserId('');
+    setShowMapUser(true);
+  };
+
+  const openAssignUnitsModal = () => {
+    setSelectedUnitIds([]);
+    setShowAssignUnits(true);
+  };
+
+  const toggleUnit = (uid) => {
+    setSelectedUnitIds(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid]);
+  };
+
+  const handleAssignUnits = async (e) => {
+    e.preventDefault();
+    if (selectedUnitIds.length === 0) return;
+    setAssigning(true);
+    try {
+      await activityService.assignToUnits({ activity_id: Number(id), unit_ids: selectedUnitIds });
+      toast.success(t('toast.assigned_units'));
+      setShowAssignUnits(false);
+    } catch (err) {
+      const detail = err.response?.data?.error || err.message || t('toast.assign_units_error');
+      toast.error(detail);
+    } finally { setAssigning(false); }
+  };
 
   if (loading) return <div className="card"><Spinner /></div>;
   if (!activity) return <div className="card"><div className="empty-state">{t('page.activity_detail.not_found')}</div></div>;
@@ -62,12 +134,21 @@ export default function ActivityDetail() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {activity.is_important && <span className="badge badge-warning">{t('badge.important')}</span>}
           {activity.is_general && <span className="badge badge-info">{t('badge.general')}</span>}
-          <button className="btn btn-icon btn-primary" onClick={() => navigate(`/activities/${id}/edit`)} title={t('page.activity_detail.edit')}>
+          {canManage && <button className="btn btn-icon btn-primary" onClick={() => navigate(`/activities/${id}/edit`)} title={t('page.activity_detail.edit')}>
             <Edit3 size={16} />
-          </button>
-          <button className="btn btn-icon btn-danger" onClick={() => setConfirmDelete(true)} title={t('page.activities.delete')}>
+          </button>}
+          {canManage && <button className="btn btn-icon btn-secondary" onClick={handleDistribute} disabled={distributing} title={distributing ? t('page.activity_detail.distributing') : t('page.activity_detail.distribute')}>
+            <Share2 size={16} />
+          </button>}
+          {canManage && <button className="btn btn-icon btn-secondary" onClick={openAssignUnitsModal} title={t('page.activity_detail.assign_units')}>
+            <Building2 size={16} />
+          </button>}
+          {canManage && <button className="btn btn-icon btn-secondary" onClick={openMapUserModal} title={t('page.activity_detail.map_user')}>
+            <UserPlus size={16} />
+          </button>}
+          {canManage && <button className="btn btn-icon btn-danger" onClick={() => setConfirmDelete(true)} title={t('page.activities.delete')}>
             <Trash2 size={16} />
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -149,8 +230,51 @@ export default function ActivityDetail() {
         </div>
       )}
 
-      <AttachmentsSection activityId={id} />
-      <CommentsSection endpoint="activity-comments" filterKey="activity" filterValue={id} />
+      <Modal open={showMapUser} onClose={() => setShowMapUser(false)} width="400px">
+        <h2>{t('page.activity_detail.map_user')}</h2>
+        <form onSubmit={handleMapUser}>
+          <div className="form-group">
+            <label>{t('page.activity_detail.select_user')}</label>
+            <select value={mapUserId} onChange={(e) => setMapUserId(e.target.value)} required>
+              <option value="">{t('form.select')}</option>
+              {mapUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowMapUser(false)} title={t('common.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" title={t('common.save')}><Check size={16} /></button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showAssignUnits} onClose={() => setShowAssignUnits(false)} width="450px">
+        <h2>{t('page.activity_detail.assign_units_title')}</h2>
+        <form onSubmit={handleAssignUnits}>
+          <div className="form-group">
+            <label>{t('page.activity_detail.select_units')}</label>
+            <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border-color, #ddd)', borderRadius: 6, padding: '0.25rem 0' }}>
+              {allUnits.length === 0 && <div style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{t('common.empty')}</div>}
+              {allUnits.map(u => (
+                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.75rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selectedUnitIds.includes(u.id)} onChange={() => toggleUnit(u.id)} />
+                  {u.name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowAssignUnits(false)} title={t('common.cancel')} disabled={assigning}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" title={t('common.save')} disabled={assigning || selectedUnitIds.length === 0}>
+              {assigning ? t('common.saving') : <Check size={16} />}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <AttachmentsSection activityId={id} readOnly={!canComment} />
+      <CommentsSection endpoint="activity-comments" filterKey="activity" filterValue={id} readOnly={!canComment} />
       <HistorySection modelo="Actividad" objectId={id} />
     </div>
   );

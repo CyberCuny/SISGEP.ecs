@@ -6,6 +6,7 @@ import api from '../services/api';
 import { useTranslation } from 'react-i18next';
 import { Users } from 'lucide-react';
 import { hasAnyRole, ROLES } from '../utils/roles';
+import { getNotificationMessage } from '../utils/notifications';
 
 const icons = {
   dashboard: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
@@ -112,16 +113,16 @@ export default function Layout() {
   const toggleTheme = useCallback(() => setDarkMode(prev => !prev), []);
 
   const navGroups = useMemo(() => {
-    const canAdmin = user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR]);
-    const canManage = canAdmin || hasAnyRole(user, [ROLES.APPROVER, ROLES.PLANNER]);
+    const isStaff = user?.is_staff;
+    const canManage = isStaff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR]);
     const groups = [
       { label: t('nav.group.principal'), items: [{ path: '/', label: t('nav.dashboard'), icon: 'dashboard' }] },
       { label: t('nav.group.gestion'), items: [{ path: '/activities', label: t('nav.activities'), icon: 'activities' }, { path: '/schedule', label: t('nav.schedule'), icon: 'schedule' }, { path: '/guidelines', label: t('nav.guidelines'), icon: 'catalog' }] },
       { label: t('nav.group.calendarios'), items: [{ path: '/calendar', label: t('nav.calendar'), icon: 'calendar' }, { path: '/calendar-individual', label: t('nav.calendar_individual'), icon: 'individual' }, { path: '/calendar-annual', label: t('nav.calendar_annual'), icon: 'annual' }] },
       { label: t('nav.group.monitoreo'), items: [{ path: '/compliance', label: t('nav.compliance'), icon: 'compliance' }, { path: '/approvals', label: t('nav.approvals'), icon: 'approvals' }, { path: '/approved-plans', label: t('nav.approved_plans'), icon: 'approvals' }] },
       { label: t('nav.group.comunicacion'), items: [{ path: '/messages', label: t('nav.messages'), icon: 'messages' }, { path: '/notifications', label: t('nav.notifications'), icon: 'notifications' }] },
-      ...(canAdmin ? [{ label: t('nav.group.administracion'), items: [{ path: '/units', label: t('nav.units'), icon: 'units' }, { path: '/users', label: t('nav.users'), icon: 'users' }, { path: '/roles', label: t('nav.roles'), icon: 'users' }, { path: '/catalog', label: t('nav.catalog'), icon: 'catalog' }, { path: '/email-config', label: t('nav.email_config'), icon: 'messages' }, { path: '/system-config', label: t('nav.system_config'), icon: 'catalog' }] }] : []),
-      ...(canManage ? [{ label: t('nav.group.datos'), items: [{ path: '/reports', label: t('nav.reports'), icon: 'reports' }, { path: '/import', label: t('nav.import'), icon: 'import' }, { path: '/work-days', label: t('nav.work_days'), icon: 'workdays' }, { path: '/audit-log', label: t('nav.audit_log'), icon: 'audit' }, ...(canAdmin ? [{ path: '/backups', label: t('nav.backups'), icon: 'schedule' }] : [])] }] : []),
+      ...(isStaff ? [{ label: t('nav.group.administracion'), items: [{ path: '/units', label: t('nav.units'), icon: 'units' }, { path: '/users', label: t('nav.users'), icon: 'users' }, { path: '/roles', label: t('nav.roles'), icon: 'users' }, { path: '/email-config', label: t('nav.email_config'), icon: 'messages' }, { path: '/system-config', label: t('nav.system_config'), icon: 'catalog' }] }] : []),
+      ...(canManage ? [{ label: t('nav.group.datos'), items: [{ path: '/catalog', label: t('nav.catalog'), icon: 'catalog' }, { path: '/reports', label: t('nav.reports'), icon: 'reports' }, { path: '/import', label: t('nav.import'), icon: 'import' }, { path: '/work-days', label: t('nav.work_days'), icon: 'workdays' }, { path: '/audit-log', label: t('nav.audit_log'), icon: 'audit' }, ...(isStaff ? [{ path: '/backups', label: t('nav.backups'), icon: 'schedule' }] : [])] }] : []),
     ];
     return groups;
   }, [t, user]);
@@ -252,7 +253,7 @@ export default function Layout() {
                     notifications.slice(0, 5).map((n) => (
                       <button key={n.id} onClick={() => { if (!n.is_read) { api.post(`/notifications/${n.id}/mark_read/`).catch(() => console.warn('Mark read failed')); fetchNotif(); } navigate('/notifications'); setNotifOpen(false); }}
                         style={{ textAlign: 'left', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border-light)', fontSize: 'var(--font-sm)' }}>
-                        <div style={{ fontWeight: n.is_read ? 400 : 600, color: 'var(--text)', marginBottom: '0.15rem' }}>{n.title || n.message}</div>
+                        <div style={{ fontWeight: n.is_read ? 400 : 600, color: 'var(--text)', marginBottom: '0.15rem' }}>{getNotificationMessage(n, t)}</div>
                         <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
                       </button>
                     ))

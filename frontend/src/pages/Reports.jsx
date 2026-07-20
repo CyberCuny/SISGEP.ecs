@@ -3,9 +3,15 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Download, Eye, FileText, RefreshCw } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Reports() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  if (!user?.is_staff && !hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR])) {
+    return <div className="page-header"><h1>{t('page.reports.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.reports.no_access')}</p></div>;
+  }
   const [users, setUsers] = useState([]);
   const [reportType, setReportType] = useState('individual');
   const [userId, setUserId] = useState('');

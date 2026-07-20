@@ -6,7 +6,10 @@ from apps.core.models import (User, OrganizationalUnit, Category, ActivityType,
 class Activity(models.Model):
     place = models.CharField(max_length=255, blank=True, null=True, verbose_name='Lugar')
     responsible = models.CharField(max_length=500, blank=True, null=True, verbose_name='Responsables')
+    responsible_user = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='responsible_activities', verbose_name='Responsable (usuario)')
+    responsible_users = models.ManyToManyField(User, through='ActivityResponsible', related_name='responsible_in_activities', blank=True, verbose_name='Responsables (usuarios)')
     participants = models.CharField(max_length=500, blank=True, null=True, verbose_name='Participantes')
+    participant_users = models.ManyToManyField(User, through='ActivityParticipant', related_name='participant_in_activities', blank=True, verbose_name='Participantes (usuarios)')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, blank=True, null=True, db_column='id_categoria', verbose_name='Categoria')
     organizational_unit = models.ForeignKey(OrganizationalUnit, on_delete=models.SET_NULL, blank=True, null=True, db_column='id_unidad_organizativa', verbose_name='Unidad Organizativa')
     description = models.CharField(max_length=500, blank=True, null=True, verbose_name='Descripcion')
@@ -86,6 +89,28 @@ class UnfulfilledActivity(models.Model):
 
     def __str__(self):
         return f'Incumplimiento: {self.activity.description[:50]}'
+
+
+class ActivityResponsible(models.Model):
+    activity = models.ForeignKey(Activity, on_delete=models.CASCADE, db_column='id_actividad', related_name='responsible_relations')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='id_user')
+
+    class Meta:
+        db_table = 'actividad_responsable'
+        unique_together = ('activity', 'user')
+        verbose_name = 'Responsable de Actividad'
+        verbose_name_plural = 'Responsables de Actividades'
+
+
+class ActivityParticipant(models.Model):
+    activity = models.ForeignKey(Activity, on_delete=models.CASCADE, db_column='id_actividad', related_name='participant_relations')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='id_user')
+
+    class Meta:
+        db_table = 'actividad_participante'
+        unique_together = ('activity', 'user')
+        verbose_name = 'Participante de Actividad'
+        verbose_name_plural = 'Participantes de Actividades'
 
 
 class ActivityAttachment(models.Model):

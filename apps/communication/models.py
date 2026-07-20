@@ -26,6 +26,7 @@ class Notification(models.Model):
     related_object_id = models.IntegerField(blank=True, null=True)
     related_object_type = models.CharField(max_length=100, blank=True, null=True)
     is_read = models.BooleanField(default=False)
+    meta = models.JSONField(default=dict, blank=True, verbose_name='Metadatos')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

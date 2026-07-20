@@ -4,6 +4,7 @@ import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 import { useTranslation } from 'react-i18next';
 import { CheckCheck } from 'lucide-react';
+import { getNotificationMessage } from '../utils/notifications';
 
 const typeColors = {
   approval: 'badge badge-success',
@@ -68,7 +69,7 @@ export default function Notifications() {
                     </span>
                     <small>{new Date(n.created_at).toLocaleString()}</small>
                   </div>
-                  <p>{n.message}</p>
+                  <p>{getNotificationMessage(n, t)}</p>
                 </div>
                 {!n.is_read && <div className="notification-dot" />}
               </div>

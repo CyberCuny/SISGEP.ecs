@@ -4,11 +4,16 @@ import api from '../services/api';
 import Spinner from '../components/Spinner';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import Modal from '../components/Modal';
 import { Search, Eye, X, AlertTriangle, FileText } from 'lucide-react';
 
 export default function Compliance() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canRegisterIncident = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR, ROLES.EXECUTOR]);
   useDocumentTitle(t('page.compliance.title'));
   const today = new Date();
   const [desde, setDesde] = useState(`${today.getFullYear()}-01-01`);
@@ -58,41 +63,37 @@ export default function Compliance() {
       ) : showDetail ? (
         <div className="card">
           <div className="card-header"><h3>{t('page.compliance.detail_title')}</h3></div>
-          {showIncumplimiento && (
-            <div className="modal-overlay" onClick={() => setShowIncumplimiento(false)}>
-              <div className="modal-content" style={{ width: '450px' }} onClick={(e) => e.stopPropagation()}>
-                <h2>{t('page.compliance.register_incident_title')}</h2>
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  try {
-                    await api.post('/unfulfilled-activities/', {
-                      activity: incPeriod.activity_id, schedule_period: incPeriod.id, description: incDesc
-                    });
-                    toast.success(t('toast.incident_registered'));
-                    setShowIncumplimiento(false);
-                    setIncDesc('');
-                  } catch { toast.error(t('toast.incident_register_error')); }
-                }}>
-                  <div className="form-group">
-                    <label>{t('page.compliance.activity')}</label>
-                    <input value={incPeriod.activity || ''} disabled style={{ opacity: 0.6 }} />
-                  </div>
-                  <div className="form-group">
-                    <label>{t('page.compliance.period')}</label>
-                    <input value={`${incPeriod.start_date} - ${incPeriod.end_date}`} disabled style={{ opacity: 0.6 }} />
-                  </div>
-                  <div className="form-group">
-                    <label>{t('page.compliance.description')}</label>
-                    <textarea value={incDesc} onChange={(e) => setIncDesc(e.target.value)} rows={4} required placeholder={t('form.description_incident_placeholder')} />
-                  </div>
-                  <div className="form-actions">
-                    <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowIncumplimiento(false)} title={t('page.compliance.cancel')}><X size={16} /></button>
-                    <button className="btn btn-icon btn-danger" type="submit" title={t('page.compliance.register')}><AlertTriangle size={16} /></button>
-                  </div>
-                </form>
+          <Modal open={showIncumplimiento} onClose={() => setShowIncumplimiento(false)} width="450px">
+            <h2>{t('page.compliance.register_incident_title')}</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await api.post('/unfulfilled-activities/', {
+                  activity: incPeriod?.activity_id, schedule_period: incPeriod?.id, description: incDesc
+                });
+                toast.success(t('toast.incident_registered'));
+                setShowIncumplimiento(false);
+                setIncDesc('');
+              } catch { toast.error(t('toast.incident_register_error')); }
+            }}>
+              <div className="form-group">
+                <label>{t('page.compliance.activity')}</label>
+                <input value={incPeriod?.activity || ''} disabled style={{ opacity: 0.6 }} />
               </div>
-            </div>
-          )}
+              <div className="form-group">
+                <label>{t('page.compliance.period')}</label>
+                <input value={`${incPeriod?.start_date || ''} - ${incPeriod?.end_date || ''}`} disabled style={{ opacity: 0.6 }} />
+              </div>
+              <div className="form-group">
+                <label>{t('page.compliance.description')}</label>
+                <textarea value={incDesc} onChange={(e) => setIncDesc(e.target.value)} rows={4} required placeholder={t('form.description_incident_placeholder')} />
+              </div>
+              <div className="form-actions">
+                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowIncumplimiento(false)} title={t('page.compliance.cancel')}><X size={16} /></button>
+                <button className="btn btn-icon btn-danger" type="submit" title={t('page.compliance.register')}><AlertTriangle size={16} /></button>
+              </div>
+            </form>
+          </Modal>
           <div className="table-container">
             <table>
               <thead>
@@ -117,7 +118,7 @@ export default function Compliance() {
                     <td>{d.is_extraplan ? <span className="badge badge-warning">{t('badge.yes')}</span> : t('badge.no')}</td>
                     <td>{d.is_modified ? <span className="badge badge-info">{t('badge.yes')}</span> : t('badge.no')}</td>
                     <td>
-                      {d.status === 'INCUMPLIDO' && (
+                      {d.status === 'INCUMPLIDO' && canRegisterIncident && (
                         <button className="btn btn-icon btn-sm btn-danger" onClick={() => { setIncPeriod(d); setShowIncumplimiento(true); }} title={t('action.register_incident')}>
                           <AlertTriangle size={14} />
                         </button>

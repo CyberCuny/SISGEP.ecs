@@ -43,12 +43,12 @@ class RolePermissionTestBase(TestCase):
         ActivityMapping.objects.create(activity=self.act2, user=self.executor)
         ActivityMapping.objects.create(activity=self.act3, user=self.executor)
 
-        self.period = SchedulePeriod.objects.create(activity=self.act, start_date='2026-01-01',
-                                                     end_date='2026-01-31', start_time='08:00', end_time='17:00')
-        self.period2 = SchedulePeriod.objects.create(activity=self.act2, start_date='2026-02-01',
-                                                      end_date='2026-02-28', start_time='08:00', end_time='17:00')
-        self.period3 = SchedulePeriod.objects.create(activity=self.act3, start_date='2026-03-01',
-                                                      end_date='2026-03-31', start_time='08:00', end_time='17:00')
+        self.period = SchedulePeriod.objects.create(activity=self.act, start_date='2026-09-01',
+                                                     end_date='2026-09-30', start_time='08:00', end_time='17:00')
+        self.period2 = SchedulePeriod.objects.create(activity=self.act2, start_date='2026-10-01',
+                                                       end_date='2026-10-31', start_time='08:00', end_time='17:00')
+        self.period3 = SchedulePeriod.objects.create(activity=self.act3, start_date='2026-11-01',
+                                                       end_date='2026-11-30', start_time='08:00', end_time='17:00')
 
         SchedulePeriodMapping.objects.create(schedule_period=self.period3, user=self.executor)
 
@@ -162,10 +162,10 @@ class ActivityActionPermissionTest(RolePermissionTestBase):
         res = self.client.delete(f'/api/v1/activities/{self.act.id}/')
         self.assertEqual(res.status_code, 204)
 
-    def test_planner_cannot_delete_activity(self):
+    def test_planner_can_delete_activity(self):
         self._auth(self.planner)
         res = self.client.delete(f'/api/v1/activities/{self.act.id}/')
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.status_code, 204)
 
 
 class ScheduleActionPermissionTest(RolePermissionTestBase):
@@ -200,10 +200,10 @@ class ScheduleActionPermissionTest(RolePermissionTestBase):
         res = self.client.delete(f'/api/v1/schedule/periods/{self.period.id}/')
         self.assertEqual(res.status_code, 204)
 
-    def test_planner_cannot_delete_period(self):
+    def test_planner_can_delete_period(self):
         self._auth(self.planner)
         res = self.client.delete(f'/api/v1/schedule/periods/{self.period.id}/')
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.status_code, 204)
 
 
 class ApprovalActionPermissionTest(RolePermissionTestBase):

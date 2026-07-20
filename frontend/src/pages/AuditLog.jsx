@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 
 export default function AuditLog() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  if (!user?.is_staff) {
+    return <div className="page-header"><h1>{t('page.audit.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.audit.no_access')}</p></div>;
+  }
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);

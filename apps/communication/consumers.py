@@ -26,4 +26,5 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'notification_type': event['notification_type'],
             'related_object_id': event.get('related_object_id'),
             'related_object_type': event.get('related_object_type'),
+            'meta': event.get('meta', {}),
         }))

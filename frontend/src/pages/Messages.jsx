@@ -5,6 +5,7 @@ import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 import { useTranslation } from 'react-i18next';
 import { Pen, X, Send } from 'lucide-react';
+import Modal from '../components/Modal';
 
 export default function Messages() {
   const [tab, setTab] = useState('inbox');
@@ -74,54 +75,46 @@ export default function Messages() {
         </button>
       </div>
 
-      {showCompose && (
-        <div className="modal-overlay" onClick={() => setShowCompose(false)}>
-          <div className="modal-content" style={{ width: '550px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{t('page.messages.compose_title')}</h2>
-            <form onSubmit={handleSend}>
-              <div className="form-group">
-                <label>{t('page.messages.recipient')}</label>
-                <select value={composeForm.recipient} onChange={(e) => setComposeForm({...composeForm, recipient: e.target.value})} required>
-                  <option value="">{t('form.select')}</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>{t('page.messages.subject')}</label>
-                <input value={composeForm.subject} onChange={(e) => setComposeForm({...composeForm, subject: e.target.value})} required />
-              </div>
-              <div className="form-group">
-                <label>{t('page.messages.body')}</label>
-                <textarea rows={6} value={composeForm.body} onChange={(e) => setComposeForm({...composeForm, body: e.target.value})} required />
-              </div>
-              <div className="form-actions">
-                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowCompose(false)} title={t('page.messages.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" disabled={sending} title={sending ? t('page.messages.sending') : t('page.messages.send')}>
-                  <Send size={16} />
-                </button>
-              </div>
-            </form>
+      <Modal open={showCompose} onClose={() => setShowCompose(false)} width="550px">
+        <h2>{t('page.messages.compose_title')}</h2>
+        <form onSubmit={handleSend}>
+          <div className="form-group">
+            <label>{t('page.messages.recipient')}</label>
+            <select value={composeForm.recipient} onChange={(e) => setComposeForm({...composeForm, recipient: e.target.value})} required>
+              <option value="">{t('form.select')}</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username}</option>)}
+            </select>
           </div>
-        </div>
-      )}
+          <div className="form-group">
+            <label>{t('page.messages.subject')}</label>
+            <input value={composeForm.subject} onChange={(e) => setComposeForm({...composeForm, subject: e.target.value})} required />
+          </div>
+          <div className="form-group">
+            <label>{t('page.messages.body')}</label>
+            <textarea rows={6} value={composeForm.body} onChange={(e) => setComposeForm({...composeForm, body: e.target.value})} required />
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowCompose(false)} title={t('page.messages.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={sending} title={sending ? t('page.messages.sending') : t('page.messages.send')}>
+              <Send size={16} />
+            </button>
+          </div>
+        </form>
+      </Modal>
 
-      {selectedMsg && (
-        <div className="modal-overlay" onClick={() => setSelectedMsg(null)}>
-          <div className="modal-content" style={{ width: '600px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{selectedMsg.subject}</h2>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-              <strong>{t('page.messages.from_label')}</strong> {selectedMsg.sender_name || selectedMsg.sender} &nbsp;|&nbsp;
-              <strong>{t('page.messages.to_label')}</strong> {selectedMsg.recipient_name || selectedMsg.recipient} &nbsp;|&nbsp;
-              <strong>{new Date(selectedMsg.created_at).toLocaleString()}</strong>
-              {selectedMsg.read_at && <span> &nbsp;|&nbsp; <em>{t('badge.read')}: {new Date(selectedMsg.read_at).toLocaleString()}</em></span>}
-            </div>
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{selectedMsg.body}</div>
-            <div className="form-actions">
-              <button className="btn btn-icon btn-primary" onClick={() => setSelectedMsg(null)} title={t('page.messages.close')}><X size={16} /></button>
-            </div>
-          </div>
+      <Modal open={!!selectedMsg} onClose={() => setSelectedMsg(null)} width="600px">
+        <h2>{selectedMsg?.subject}</h2>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+          <strong>{t('page.messages.from_label')}</strong> {selectedMsg?.sender_name || selectedMsg?.sender} &nbsp;|&nbsp;
+          <strong>{t('page.messages.to_label')}</strong> {selectedMsg?.recipient_name || selectedMsg?.recipient} &nbsp;|&nbsp;
+          <strong>{new Date(selectedMsg?.created_at).toLocaleString()}</strong>
+          {selectedMsg?.read_at && <span> &nbsp;|&nbsp; <em>{t('badge.read')}: {new Date(selectedMsg.read_at).toLocaleString()}</em></span>}
         </div>
-      )}
+        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{selectedMsg?.body}</div>
+        <div className="form-actions">
+          <button className="btn btn-icon btn-primary" onClick={() => setSelectedMsg(null)} title={t('page.messages.close')}><X size={16} /></button>
+        </div>
+      </Modal>
 
       <div className="card">
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>

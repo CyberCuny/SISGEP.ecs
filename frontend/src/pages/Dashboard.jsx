@@ -179,12 +179,16 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-header"><h3>{t('page.dashboard.quick_actions')}</h3></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <button className="btn btn-primary" onClick={() => navigate('/activities/new')}>
-              <Plus size={16} /> {t('page.dashboard.new_activity')}
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/approvals')}>
-              <CheckCircle size={16} /> {t('page.dashboard.view_approvals')}
-            </button>
+            {hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]) && (
+              <button className="btn btn-primary" onClick={() => navigate('/activities/new')}>
+                <Plus size={16} /> {t('page.dashboard.new_activity')}
+              </button>
+            )}
+            {hasAnyRole(user, [ROLES.APPROVER, ROLES.DIRECTOR]) && (
+              <button className="btn btn-secondary" onClick={() => navigate('/approvals')}>
+                <CheckCircle size={16} /> {t('page.dashboard.view_approvals')}
+              </button>
+            )}
             <button className="btn btn-secondary" onClick={() => navigate('/calendar')}>
               <Calendar size={16} /> {t('page.dashboard.view_calendar')}
             </button>

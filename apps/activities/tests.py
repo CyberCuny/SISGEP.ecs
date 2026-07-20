@@ -1,8 +1,9 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
-from apps.core.models import Category
-from apps.activities.models import Activity
+from apps.core.models import Category, OrganizationalUnit
+from apps.activities.models import Activity, ActivityOrgUnit
+from apps.schedule.models import SchedulePeriod, ScheduleOrgUnit
 
 User = get_user_model()
 
@@ -63,3 +64,24 @@ class ActivityAPITest(TestCase):
         })
         self.assertEqual(res.status_code, 201)
         self.assertTrue(res.data['is_general'])
+
+    def test_assign_to_units(self):
+        act = Activity.objects.create(description='Para asignar', created_by=self.user, category=self.cat)
+        u1 = OrganizationalUnit.objects.create(name='UO A')
+        u2 = OrganizationalUnit.objects.create(name='UO B')
+        url = '/api/v1/activities/assign_to_units/'
+        res = self.client.post(url, {'activity_id': act.id, 'unit_ids': [u1.id, u2.id]}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(ActivityOrgUnit.objects.filter(activity=act).count(), 2)
+
+    def test_assign_to_units_missing_activity_id(self):
+        res = self.client.post('/api/v1/activities/assign_to_units/', {'unit_ids': []}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_assign_to_units_creates_schedule_org_units(self):
+        act = Activity.objects.create(description='Con cronograma', created_by=self.user, category=self.cat)
+        sp = SchedulePeriod.objects.create(activity=act, start_date='2026-08-01', end_date='2026-08-31', start_time='08:00', end_time='17:00')
+        u = OrganizationalUnit.objects.create(name='UO Crono')
+        res = self.client.post('/api/v1/activities/assign_to_units/', {'activity_id': act.id, 'unit_ids': [u.id]}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(ScheduleOrgUnit.objects.filter(schedule_period=sp, organizational_unit=u).exists())

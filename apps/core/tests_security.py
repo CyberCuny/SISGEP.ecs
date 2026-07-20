@@ -240,3 +240,25 @@ class EmailVerificationFlowTest(TestCase):
         })
         self.assertEqual(res.status_code, 400)
         self.assertEqual(res.data.get('code'), 4)
+
+
+class FactoryResetTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(username='adminfr', password='test123!')
+        self.user = User.objects.create_user(username='normalfr', password='test123!')
+
+    def test_normal_user_cannot_factory_reset(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.post('/api/v1/users/factory_reset/', {}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_admin_can_factory_reset(self):
+        from apps.activities.models import Activity
+        from apps.core.models import Category
+        cat = Category.objects.create(name='Test Cat')
+        Activity.objects.create(description='Test Act', category=cat, created_by=self.admin)
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.post('/api/v1/users/factory_reset/', {}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(Activity.objects.count(), 0)

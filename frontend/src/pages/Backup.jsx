@@ -4,10 +4,15 @@ import { useToast } from '../context/ToastContext';
 import { useTranslation } from 'react-i18next';
 import { Upload, Download, RotateCcw } from 'lucide-react';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAuth } from '../context/AuthContext';
 
 export default function Backup() {
   const toast = useToast();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  if (!user?.is_staff) {
+    return <div className="page-header"><h1>{t('page.backup.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.backup.no_access')}</p></div>;
+  }
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(null);

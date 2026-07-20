@@ -19,6 +19,5 @@ router.register(r'system-config', views.SystemConfigViewSet, basename='system-co
 urlpatterns = [
     path('', include(router.urls)),
     path('search/', views.global_search, name='global-search'),
-    path('health/', views.health_check, name='health-check'),
     path('users/verify_email/', views.UserViewSet.as_view({'post': 'verify_email'}), name='user-verify-email'),
 ]

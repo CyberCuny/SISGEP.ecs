@@ -113,7 +113,7 @@ class HealthCheckTest(TestCase):
         self.client = APIClient()
 
     def test_health_ok(self):
-        res = self.client.get('/api/v1/health/')
+        res = self.client.get('/api/health/')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data['status'], 'ok')
         self.assertEqual(res.data['database'], 'ok')

@@ -5,9 +5,13 @@ import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import Spinner from '../components/Spinner';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Approvals() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canApprove = user?.is_staff || hasAnyRole(user, [ROLES.APPROVER, ROLES.DIRECTOR]);
   const [pendingActs, setPendingActs] = useState([]);
   const [pendingCronos, setPendingCronos] = useState([]);
   const [tab, setTab] = useState('activities');
@@ -79,6 +83,10 @@ export default function Approvals() {
       fetchPending();
     } catch { toast.error(t('toast.approve_error')); }
   };
+
+  if (!canApprove) {
+    return <div className="page-header"><h1>{t('page.approvals.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.approvals.no_access')}</p></div>;
+  }
 
   return (
     <div>

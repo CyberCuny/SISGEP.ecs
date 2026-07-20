@@ -1,20 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, Check, Edit3, Trash2 } from 'lucide-react';
+import Modal from '../components/Modal';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 import Pagination from '../components/Pagination';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function ApprovedPlans() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
   const [plans, setPlans] = useState([]);
   const [units, setUnits] = useState([]);
   const [activities, setActivities] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ org_unit: '', activity: '', start_date: '', end_date: '', observations: '' });
+  const [form, setForm] = useState({ organizational_unit: '', activity: '', start_date: '', end_date: '', observations: '' });
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
@@ -46,7 +51,7 @@ export default function ApprovedPlans() {
         toast.success(t('toast.created'));
       }
       setShowForm(false); setEditingId(null);
-      setForm({ org_unit: '', activity: '', start_date: '', end_date: '', observations: '' });
+      setForm({ organizational_unit: '', activity: '', start_date: '', end_date: '', observations: '' });
       fetchData();
     } catch { toast.error(t('toast.save_error')); }
     finally { setSaving(false); }
@@ -55,7 +60,7 @@ export default function ApprovedPlans() {
   const handleEdit = (plan) => {
     setEditingId(plan.id);
     setForm({
-      org_unit: plan.org_unit || '',
+      organizational_unit: plan.organizational_unit || '',
       activity: plan.activity || '',
       start_date: plan.start_date || '',
       end_date: plan.end_date || '',
@@ -83,58 +88,54 @@ export default function ApprovedPlans() {
       <Breadcrumbs items={[{ to: '/', label: t('nav.dashboard') }, { label: t('page.approved_plans.title') }]} />
       <div className="page-header">
         <h1>{t('page.approved_plans.title')}</h1>
-        <button className="btn btn-icon btn-primary" onClick={() => { setEditingId(null); setForm({ org_unit: '', activity: '', start_date: '', end_date: '', observations: '' }); setShowForm(true); }} title={t('page.approved_plans.new')}>
+        {canManage && <button className="btn btn-icon btn-primary" onClick={() => { setEditingId(null); setForm({ organizational_unit: '', activity: '', start_date: '', end_date: '', observations: '' }); setShowForm(true); }} title={t('page.approved_plans.new')}>
           <Plus size={16} />
-        </button>
+        </button>}
       </div>
 
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-content" style={{ width: '500px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editingId ? t('page.approved_plans.edit_title') : t('page.approved_plans.create_title')}</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>{t('page.approved_plans.org_unit')}</label>
-                <select value={form.org_unit} onChange={(e) => setForm({...form, org_unit: e.target.value})}>
-                  <option value="">{t('form.select')}</option>
-                  {units.map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>{t('page.approved_plans.activity')}</label>
-                <select value={form.activity} onChange={(e) => setForm({...form, activity: e.target.value})} required>
-                  <option value="">{t('form.select')}</option>
-                  {activities.map(a => (
-                    <option key={a.id} value={a.id}>{a.description || a.id}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>{t('form.start_date')}</label>
-                  <input type="date" value={form.start_date} onChange={(e) => setForm({...form, start_date: e.target.value})} required />
-                </div>
-                <div className="form-group">
-                  <label>{t('form.end_date')}</label>
-                  <input type="date" value={form.end_date} onChange={(e) => setForm({...form, end_date: e.target.value})} required />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>{t('form.observation')}</label>
-                <textarea value={form.observations} onChange={(e) => setForm({...form, observations: e.target.value})} rows={3} />
-              </div>
-              <div className="form-actions">
-                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('common.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (editingId ? t('common.update') : t('common.create'))}>
-                  <Check size={16} />
-                </button>
-              </div>
-            </form>
+      <Modal open={showForm} onClose={() => setShowForm(false)} width="500px">
+        <h2>{editingId ? t('page.approved_plans.edit_title') : t('page.approved_plans.create_title')}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>{t('page.approved_plans.org_unit')}</label>
+            <select value={form.organizational_unit} onChange={(e) => setForm({...form, organizational_unit: e.target.value})}>
+              <option value="">{t('form.select')}</option>
+              {units.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
           </div>
-        </div>
-      )}
+          <div className="form-group">
+            <label>{t('page.approved_plans.activity')}</label>
+            <select value={form.activity} onChange={(e) => setForm({...form, activity: e.target.value})} required>
+              <option value="">{t('form.select')}</option>
+              {activities.map(a => (
+                <option key={a.id} value={a.id}>{a.description || a.id}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('form.start_date')}</label>
+              <input type="date" value={form.start_date} onChange={(e) => setForm({...form, start_date: e.target.value})} required />
+            </div>
+            <div className="form-group">
+              <label>{t('form.end_date')}</label>
+              <input type="date" value={form.end_date} onChange={(e) => setForm({...form, end_date: e.target.value})} required />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>{t('form.observation')}</label>
+            <textarea value={form.observations} onChange={(e) => setForm({...form, observations: e.target.value})} rows={3} />
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('common.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (editingId ? t('common.update') : t('common.create'))}>
+              <Check size={16} />
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <div className="card">
         <div className="table-container">
@@ -153,15 +154,15 @@ export default function ApprovedPlans() {
             <tbody>
               {plans.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.org_unit_name || p.org_unit || '-'}</td>
+                  <td>{p.org_unit_name || p.organizational_unit || '-'}</td>
                   <td>{p.activity_name || p.activity || '-'}</td>
                   <td>{p.start_date || '-'}</td>
                   <td>{p.end_date || '-'}</td>
                   <td>{p.approved_by_name || p.approved_by || '-'}</td>
                   <td>{p.observations || '-'}</td>
                   <td>
-                    <button className="btn btn-icon btn-sm btn-primary" onClick={() => handleEdit(p)} title={t('common.edit')}><Edit3 size={14} /></button>
-                    <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(p.id)} title={t('common.delete')}><Trash2 size={14} /></button>
+                    {canManage && <button className="btn btn-icon btn-sm btn-primary" onClick={() => handleEdit(p)} title={t('common.edit')}><Edit3 size={14} /></button>}
+                    {canManage && <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(p.id)} title={t('common.delete')}><Trash2 size={14} /></button>}
                   </td>
                 </tr>
               ))}

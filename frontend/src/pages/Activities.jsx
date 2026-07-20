@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, Search, Trash2, Star, Minus, UserCheck, X, Eye, Edit3 } from 'lucide-react';
+import Modal from '../components/Modal';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +19,7 @@ import { hasAnyRole, ROLES } from '../utils/roles';
 export default function Activities() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR]);
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
   useDocumentTitle(t('page.activities.title'));
   const [activities, setActivities] = useState([]);
   const today = new Date();
@@ -273,23 +274,19 @@ export default function Activities() {
         onCancel={() => setBatchConfirm(null)}
       />
 
-      {showAssignModal && (
-        <div className="modal-overlay" onClick={() => setShowAssignModal(false)}>
-          <div className="modal-content" style={{ width: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{t('page.activities.batch_assign_title')}</h2>
-            <p>{t('page.activities.batch_assign_desc', { count: selected.size })}</p>
-            <div className="form-group">
-              <select id="batch-unit-select" value="" onChange={(e) => { if (e.target.value) doBatchAssign(e.target.value); }}>
-                <option value="">{t('form.select')}</option>
-                {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-icon btn-secondary" onClick={() => setShowAssignModal(false)} disabled={batchLoading} title={t('common.cancel')}><X size={16} /></button>
-            </div>
-          </div>
+      <Modal open={showAssignModal} onClose={() => setShowAssignModal(false)} width="400px">
+        <h2>{t('page.activities.batch_assign_title')}</h2>
+        <p>{t('page.activities.batch_assign_desc', { count: selected.size })}</p>
+        <div className="form-group">
+          <select id="batch-unit-select" value="" onChange={(e) => { if (e.target.value) doBatchAssign(e.target.value); }}>
+            <option value="">{t('form.select')}</option>
+            {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
         </div>
-      )}
+        <div className="form-actions">
+          <button className="btn btn-icon btn-secondary" onClick={() => setShowAssignModal(false)} disabled={batchLoading} title={t('common.cancel')}><X size={16} /></button>
+        </div>
+      </Modal>
     </div>
   );
 }

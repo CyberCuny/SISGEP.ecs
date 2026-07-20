@@ -4,10 +4,16 @@ import { useToast } from '../context/ToastContext';
 import { useTranslation } from 'react-i18next';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, Edit3, Trash2, Check, X } from 'lucide-react';
+import Modal from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
 
 export default function SystemConfig() {
   const toast = useToast();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  if (!user?.is_staff) {
+    return <div className="page-header"><h1>{t('page.system_config.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.system_config.no_access')}</p></div>;
+  }
   const [configs, setConfigs] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ key: '', value: '' });
@@ -94,27 +100,23 @@ export default function SystemConfig() {
         onConfirm={confirmDeleteAction}
         onCancel={() => setConfirmDelete(null)}
       />
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>{editing ? t('page.system_config.modal_edit') : t('page.system_config.modal_new')}</h2>
-            <form onSubmit={handleSave}>
-              <div className="form-group">
-                <label>{t('page.system_config.key')}</label>
-                <input value={form.key} onChange={e => setForm({...form, key: e.target.value})} required disabled={!!editing} />
-              </div>
-              <div className="form-group">
-                <label>{t('page.system_config.value')}</label>
-                <textarea value={form.value} onChange={e => setForm({...form, value: e.target.value})} rows={3} />
-              </div>
-              <div className="form-actions">
-                <button type="submit" className="btn btn-icon btn-primary" title={t('page.system_config.save')}><Check size={16} /></button>
-                <button type="button" className="btn btn-icon btn-secondary" onClick={() => setShowModal(false)} title={t('page.system_config.cancel')}><X size={16} /></button>
-              </div>
-            </form>
+      <Modal open={showModal} onClose={() => setShowModal(false)}>
+        <h2>{editing ? t('page.system_config.modal_edit') : t('page.system_config.modal_new')}</h2>
+        <form onSubmit={handleSave}>
+          <div className="form-group">
+            <label>{t('page.system_config.key')}</label>
+            <input value={form.key} onChange={e => setForm({...form, key: e.target.value})} required disabled={!!editing} />
           </div>
-        </div>
-      )}
+          <div className="form-group">
+            <label>{t('page.system_config.value')}</label>
+            <textarea value={form.value} onChange={e => setForm({...form, value: e.target.value})} rows={3} />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-icon btn-primary" title={t('page.system_config.save')}><Check size={16} /></button>
+            <button type="button" className="btn btn-icon btn-secondary" onClick={() => setShowModal(false)} title={t('page.system_config.cancel')}><X size={16} /></button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

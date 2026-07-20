@@ -20,7 +20,7 @@ from apps.core.serializers import (RoleSerializer, UserSerializer, UserCreateSer
                                     EmailConfigSerializer, SystemConfigSerializer)
 from apps.core.utils import log_action, compute_diff
 from apps.core.throttles import WriteThrottle, AuthThrottle
-from apps.core.permissions import IsAdmin, has_any_role, ROLE_DIRECTOR
+from apps.core.permissions import IsAdmin, IsAdminOrDirector, HasRole, has_any_role, ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR
 from django.shortcuts import get_object_or_404
 from django.db import connection
 
@@ -31,24 +31,39 @@ logger = logging.getLogger(__name__)
 
 
 
-def _create_notification(user, message, notification_type, related_object_id=None, related_object_type=None):
+def _create_notification(user, message, notification_type, related_object_id=None, related_object_type=None, meta=None):
     from apps.communication.models import Notification
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
     from apps.core.utils import send_email_with_config
-    notif = Notification.objects.create(
-        user=user,
-        message=message,
-        notification_type=notification_type,
-        related_object_id=related_object_id,
-        related_object_type=related_object_type,
-    )
+    from django.db.utils import OperationalError
+    from django.db import connection
+    from django.utils import timezone
+    try:
+        notif = Notification.objects.create(
+            user=user, message=message, notification_type=notification_type,
+            related_object_id=related_object_id, related_object_type=related_object_type,
+            meta=meta or {},
+        )
+    except OperationalError:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO notificacion (id_usuario, message, notification_type, related_object_id, related_object_type, is_read, created_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                [user.id, message, notification_type, related_object_id, related_object_type, False, timezone.now()]
+            )
+            notif = Notification.objects.filter(user=user).latest('created_at')
     try:
         channel_layer = get_channel_layer()
+        try:
+            notif_meta = notif.meta
+        except Exception:
+            notif_meta = meta or {}
         async_to_sync(channel_layer.group_send)(
             f'notifications_{user.id}',
             {'type': 'notify', 'message': message, 'notification_type': notification_type,
-             'related_object_id': related_object_id, 'related_object_type': related_object_type}
+             'related_object_id': related_object_id, 'related_object_type': related_object_type,
+             'meta': notif_meta}
         )
     except Exception:
         logger.exception('Error sending WebSocket notification')
@@ -158,8 +173,10 @@ class UserViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         if self.action in ['me', 'me_update', 'logout', 'list', 'retrieve', 'roles', 'ldap_list']:
             return [IsAuthenticated()]
-        if self.action in ['create', 'update', 'partial_update', 'destroy', 'assign_roles', 'remove_roles', 'reset_password']:
+        if self.action in ['assign_roles', 'remove_roles', 'import_ldap', 'factory_reset']:
             return [IsAdmin()]
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'reset_password']:
+            return [IsAdminOrDirector()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -317,6 +334,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def change_password(self, request, pk=None):
+        if request.user.pk != int(pk):
+            return Response({'error': 'No puedes cambiar la contraseña de otro usuario'}, status=403)
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError as PasswordValidationError
         user = self.get_object()
@@ -371,7 +390,8 @@ class UserViewSet(viewsets.ModelViewSet):
         for u in existing_users:
             if u != request.user:
                 _create_notification(u, f'Se le asignaron roles: {", ".join(role_names)}', 'system',
-                                     related_object_id=u.pk, related_object_type='User')
+                                     related_object_id=u.pk, related_object_type='User',
+                                     meta={'user_id': u.pk, 'user_name': u.display_name, 'roles': role_names})
         log_action(request, 'Rol', f'Asignó roles {role_ids} a usuarios {user_ids}')
         return Response({'ok': True})
 
@@ -395,7 +415,8 @@ class UserViewSet(viewsets.ModelViewSet):
         for u in existing_users:
             if u != request.user:
                 _create_notification(u, f'Se le removieron roles: {", ".join(role_names)}', 'system',
-                                     related_object_id=u.pk, related_object_type='User')
+                                     related_object_id=u.pk, related_object_type='User',
+                                     meta={'user_id': u.pk, 'user_name': u.display_name, 'roles': role_names})
         log_action(request, 'Rol', f'Removió roles {role_ids} de usuarios {user_ids}')
         return Response({'ok': True})
 
@@ -450,6 +471,40 @@ class UserViewSet(viewsets.ModelViewSet):
         log_action(self.request, 'Usuario', f'Importó usuario LDAP: {username}')
         return Response({'ok': True, 'username': username})
 
+    @action(detail=False, methods=['post'], permission_classes=[IsAdmin])
+    def factory_reset(self, request):
+        from apps.activities.models import (
+            Activity, ActivityGuideline, ActivityOrgUnit, ActivityMapping,
+            UnfulfilledActivity, ActivityAttachment, ActivityComment,
+            ActivityResponsible, ActivityParticipant
+        )
+        from apps.schedule.models import (
+            SchedulePeriod, SchedulePeriodMapping, ScheduleOrgUnit,
+            ApprovedPlan, WorkDay, ScheduleComment
+        )
+        from apps.communication.models import Notification, Message
+        from apps.logs.models import LogEntry
+        UnfulfilledActivity.objects.all().delete()
+        ActivityAttachment.objects.all().delete()
+        ActivityComment.objects.all().delete()
+        ActivityGuideline.objects.all().delete()
+        ActivityMapping.objects.all().delete()
+        ActivityResponsible.objects.all().delete()
+        ActivityParticipant.objects.all().delete()
+        ScheduleComment.objects.all().delete()
+        ScheduleOrgUnit.objects.all().delete()
+        SchedulePeriodMapping.objects.all().delete()
+        ApprovedPlan.objects.all().delete()
+        SchedulePeriod.objects.all().delete()
+        ActivityOrgUnit.objects.all().delete()
+        Activity.objects.all().delete()
+        WorkDay.objects.all().delete()
+        Notification.objects.all().delete()
+        Message.objects.all().delete()
+        LogEntry.objects.all().delete()
+        log_action(request, 'Sistema', 'Factory reset ejecutado')
+        return Response({'ok': True, 'message': 'Datos operacionales eliminados. Usuarios, roles y UOs preservados.'})
+
 
 class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.all()
@@ -477,6 +532,11 @@ class OrganizationalUnitViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationalUnitSerializer
     search_fields = ['name']
     filterset_fields = ['parent', 'responsible']
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'drag_drop']:
+            return [IsAdmin()]
+        return [IsAuthenticated()]
 
     def perform_create(self, serializer):
         super().perform_create(serializer)
@@ -531,10 +591,6 @@ class OrganizationalUnitViewSet(viewsets.ModelViewSet):
 
         return Response(build())
 
-    @action(detail=False, methods=['get'])
-    def full_tree(self, request):
-        return self.tree(request)
-
     @action(detail=False, methods=['patch'])
     def drag_drop(self, request):
         uo_id = request.data.get('id')
@@ -579,10 +635,6 @@ class OrganizationalUnitViewSet(viewsets.ModelViewSet):
         return Response(OrganizationalUnitSerializer(OrganizationalUnit.objects.filter(id__in=ids), many=True).data)
 
     @action(detail=False, methods=['get'])
-    def descendants_by_responsible_cronos(self, request):
-        return self.descendants_by_responsible(request)
-
-    @action(detail=False, methods=['get'])
     def descendants_by_activity(self, request):
         activity_id = request.query_params.get('activity_id')
         if not activity_id:
@@ -618,8 +670,14 @@ class OrganizationalUnitViewSet(viewsets.ModelViewSet):
 class CatalogCacheMixin:
     catalog_cache_timeout = 3600
 
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [HasRole(ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR)]
+        return [IsAuthenticated()]
+
     def list(self, request, *args, **kwargs):
-        cache_key = f'catalog_list_{self.get_queryset().model.__name__}'
+        qp = request.query_params.urlencode()
+        cache_key = f'catalog_list_{self.get_queryset().model.__name__}' + (f'_{qp}' if qp else '')
         cached = cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -629,8 +687,10 @@ class CatalogCacheMixin:
 
     def _invalidate_catalog_cache(self):
         try:
-            key = f'catalog_list_{self.get_queryset().model.__name__}'
-            cache.delete(key)
+            model_name = self.get_queryset().model.__name__
+            prefix = f'catalog_list_{model_name}'
+            cache.delete(prefix)
+            cache.delete(f'{prefix}_')
         except Exception:
             logger.exception('Error invalidating catalog cache')
 
@@ -923,15 +983,16 @@ def global_search(request):
     from apps.activities.models import Activity, ActivityMapping
     from apps.schedule.models import SchedulePeriod, SchedulePeriodMapping
     from apps.core.models import OrganizationalUnit
+    from apps.core.utils import get_user_unit_tree
 
     user = request.user
 
     def _visible_activities():
         qs = Activity.objects.filter(description__icontains=q)
         if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
-            uos = OrganizationalUnit.objects.filter(responsible=user)
+            uos = get_user_unit_tree(user)
             mapped = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
-            qs = qs.filter(Q(organizational_unit__in=uos) | Q(id__in=mapped))
+            qs = qs.filter(Q(organizational_unit__in=uos) | Q(activityorgunit__organizational_unit__in=uos) | Q(id__in=mapped))
         return [{'id': a.id, 'type': 'activity', 'title': a.description} for a in qs[:5]]
 
     def _visible_periods():
@@ -939,11 +1000,12 @@ def global_search(request):
             Q(description__icontains=q) | Q(observation__icontains=q)
         ).select_related('activity')
         if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
-            uos = OrganizationalUnit.objects.filter(responsible=user)
+            uos = get_user_unit_tree(user)
             mapped = SchedulePeriodMapping.objects.filter(user=user).values_list('schedule_period_id', flat=True)
             mapped_acts = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
             qs = qs.filter(
                 Q(activity__organizational_unit__in=uos) |
+                Q(activity__activityorgunit__organizational_unit__in=uos) |
                 Q(id__in=mapped) |
                 Q(activity_id__in=mapped_acts)
             )

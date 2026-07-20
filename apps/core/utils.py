@@ -37,6 +37,22 @@ def compute_diff(old_instance, new_data, fields):
     return diff if diff else None
 
 
+def get_user_unit_tree(user):
+    """Retorna QuerySet de UOs donde user es responsable, incluyendo todas las hijas recursivamente."""
+    from apps.core.models import OrganizationalUnit
+    direct_uos = OrganizationalUnit.objects.filter(responsible=user)
+    all_ids = set(direct_uos.values_list('id', flat=True))
+    queue = list(all_ids)
+    while queue:
+        children = OrganizationalUnit.objects.filter(parent_id__in=queue).values_list('id', flat=True)
+        new_ids = set(children) - all_ids
+        if not new_ids:
+            break
+        all_ids.update(new_ids)
+        queue = list(new_ids)
+    return OrganizationalUnit.objects.filter(id__in=all_ids)
+
+
 def send_email_with_config(subject, message, recipient_list, html_message=None):
     cfg = cache.get('email_config')
     if not cfg:

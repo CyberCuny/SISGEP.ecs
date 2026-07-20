@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from apps.core.models import User, OrganizationalUnit
-from apps.core.utils import log_action, compute_diff
+from apps.core.utils import log_action, compute_diff, get_user_unit_tree
 from apps.core.views import _create_notification
 from apps.core.permissions import IsAdmin, HasRole, has_any_role, ROLE_EXECUTOR, ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR
 from apps.activities.models import ActivityMapping
@@ -22,6 +22,10 @@ from apps.core.throttles import ReportThrottle
 
 
 def _check_overlap(activity_id, start_date, end_date, start_time, end_time, exclude_id=None):
+    if start_date > end_date:
+        return False
+    if start_time >= end_time:
+        return False
     qs = SchedulePeriod.objects.filter(
         activity_id=activity_id,
         start_date__lte=end_date,
@@ -34,6 +38,10 @@ def _check_overlap(activity_id, start_date, end_date, start_time, end_time, excl
     return qs.exists()
 
 
+def _is_past_period(instance):
+    return instance.end_date < datetime.date.today()
+
+
 class SchedulePeriodViewSet(viewsets.ModelViewSet):
     queryset = SchedulePeriod.objects.all().select_related('activity')
     serializer_class = SchedulePeriodSerializer
@@ -41,17 +49,19 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
     filterset_fields = ['activity', 'status', 'start_date', 'end_date', 'is_extraplan', 'has_incidence']
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update']:
-            return [HasRole(ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR)]
-        if self.action in ['destroy']:
-            return [IsAdmin()]
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'drag_drop']:
+            return [HasRole(ROLE_PLANNER, ROLE_DIRECTOR)]
+        if self.action in ['update_status', 'update_single_status']:
+            return [HasRole(ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR, ROLE_EXECUTOR)]
+        if self.action in ['pending_cronograms_approval', 'approve_cronogram_org_unit', 'reject_cronogram_org_unit']:
+            return [HasRole(ROLE_APPROVER, ROLE_DIRECTOR)]
         return [IsAuthenticated()]
 
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
         if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
-            uos = OrganizationalUnit.objects.filter(responsible=user)
+            uos = get_user_unit_tree(user)
             mapped_period_ids = SchedulePeriodMapping.objects.filter(user=user).values_list('schedule_period_id', flat=True)
             mapped_act_ids = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
             if has_any_role(user, [ROLE_EXECUTOR]) and not has_any_role(user, [ROLE_PLANNER, ROLE_APPROVER]):
@@ -59,6 +69,7 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
             else:
                 qs = qs.filter(
                     Q(activity__organizational_unit__in=uos) |
+                    Q(activity__activityorgunit__organizational_unit__in=uos) |
                     Q(id__in=mapped_period_ids) |
                     Q(activity_id__in=mapped_act_ids)
                 )
@@ -69,11 +80,24 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         if _check_overlap(data['activity'].id, data['start_date'], data['end_date'], data['start_time'], data['end_time']):
             raise ValidationError({'error': 'Solapamiento detectado'})
         super().perform_create(serializer)
+        instance = serializer.instance
+        meta_period = {'period_id': instance.id, 'activity_id': instance.activity.id, 'activity_desc': instance.activity.description[:80]}
+        for ar in instance.activity.responsible_relations.select_related('user'):
+            _create_notification(ar.user, f'Nuevo periodo asignado para actividad: {instance.activity.description[:80]}', 'assignment',
+                                 related_object_id=instance.id, related_object_type='SchedulePeriod',
+                                 meta={**meta_period, 'user_id': ar.user.id, 'user_name': ar.user.display_name})
+        for ap in instance.activity.participant_relations.select_related('user'):
+            _create_notification(ap.user, f'Nuevo periodo asignado para actividad: {instance.activity.description[:80]}', 'assignment',
+                                 related_object_id=instance.id, related_object_type='SchedulePeriod',
+                                 meta={**meta_period, 'user_id': ap.user.id, 'user_name': ap.user.display_name})
         log_action(self.request, 'CronogramaPeriodo', f'Creó periodo para actividad {data["activity"].id}')
 
     def perform_update(self, serializer):
         instance = self.get_object()
         data = serializer.validated_data
+        date_fields = {'start_date', 'end_date', 'start_time', 'end_time'}
+        if _is_past_period(instance) and date_fields & set(data.keys()):
+            raise ValidationError({'error': 'No se puede modificar las fechas de un periodo vencido'})
         if _check_overlap(data.get('activity', instance.activity).id,
                           data.get('start_date', instance.start_date),
                           data.get('end_date', instance.end_date),
@@ -83,17 +107,23 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
             raise ValidationError({'error': 'Solapamiento detectado'})
         super().perform_update(serializer)
         diff = compute_diff(instance, serializer.validated_data, ['start_date', 'end_date', 'start_time', 'end_time', 'status', 'description', 'observation'])
+        if diff and any(k in diff for k in ('start_date', 'end_date', 'start_time', 'end_time', 'description')):
+            meta_upd_period = {'period_id': instance.id, 'activity_id': instance.activity.id, 'activity_desc': instance.activity.description[:80]}
+            for ar in instance.activity.responsible_relations.select_related('user'):
+                _create_notification(ar.user, f'Periodo actualizado: {instance.activity.description[:80]}', 'assignment',
+                                     related_object_id=instance.id, related_object_type='SchedulePeriod',
+                                     meta={**meta_upd_period, 'user_id': ar.user.id, 'user_name': ar.user.display_name})
+            for ap in instance.activity.participant_relations.select_related('user'):
+                _create_notification(ap.user, f'Periodo actualizado: {instance.activity.description[:80]}', 'assignment',
+                                     related_object_id=instance.id, related_object_type='SchedulePeriod',
+                                     meta={**meta_upd_period, 'user_id': ap.user.id, 'user_name': ap.user.display_name})
         log_action(self.request, 'CronogramaPeriodo', f'Actualizó periodo {instance.id}', object_id=instance.pk, data_diff=diff)
 
     def perform_destroy(self, instance):
-        user = self.request.user
-        activity = instance.activity
-        if user.is_staff or has_any_role(user, [ROLE_DIRECTOR]) or activity.organizational_unit and activity.organizational_unit.responsible == user:
-            log_action(self.request, 'CronogramaPeriodo', f'Eliminó periodo {instance.id}')
-            instance.delete()
-        else:
-            SchedulePeriodMapping.objects.filter(schedule_period=instance, user=user).delete()
-            log_action(self.request, 'CronogramaPeriodo', f'Removió referencia a periodo {instance.id}')
+        if _is_past_period(instance):
+            raise ValidationError({'error': 'No se puede eliminar un periodo vencido'})
+        log_action(self.request, 'CronogramaPeriodo', f'Eliminó periodo {instance.id}')
+        instance.delete()
 
     @action(detail=False, methods=['get'])
     def calendar(self, request):
@@ -121,11 +151,12 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         if user_id:
             try:
                 u = User.objects.get(id=user_id)
-                uos = OrganizationalUnit.objects.filter(responsible=u)
+                uos = get_user_unit_tree(u)
                 mapped_period_ids = SchedulePeriodMapping.objects.filter(user=u).values_list('schedule_period_id', flat=True)
                 mapped_act_ids = ActivityMapping.objects.filter(user=u).values_list('activity_id', flat=True)
                 qs = qs.filter(
                     Q(activity__organizational_unit__in=uos) |
+                    Q(activity__activityorgunit__organizational_unit__in=uos) |
                     Q(id__in=mapped_period_ids) |
                     Q(activity_id__in=mapped_act_ids)
                 )
@@ -168,11 +199,12 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         if user_id:
             try:
                 u = User.objects.get(id=user_id)
-                uos = OrganizationalUnit.objects.filter(responsible=u)
+                uos = get_user_unit_tree(u)
                 mapped_period_ids = SchedulePeriodMapping.objects.filter(user=u).values_list('schedule_period_id', flat=True)
                 mapped_act_ids = ActivityMapping.objects.filter(user=u).values_list('activity_id', flat=True)
                 qs = qs.filter(
                     Q(activity__organizational_unit__in=uos) |
+                    Q(activity__activityorgunit__organizational_unit__in=uos) |
                     Q(id__in=mapped_period_ids) |
                     Q(activity_id__in=mapped_act_ids)
                 )
@@ -187,11 +219,11 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         allowed = {'CUMPLIDO', 'INCUMPLIDO', 'PENDIENTE', ''}
         if status_val not in allowed:
             return Response({'error': f'Estado inválido: {status_val}'}, status=400)
-        SchedulePeriod.objects.filter(id__in=ids).update(status=status_val)
+        self.get_queryset().filter(id__in=ids).update(status=status_val)
         log_action(request, 'CronogramaPeriodo', f'Actualizó estado de periodos {ids} a {status_val}')
         return Response({'ok': True})
 
-    @action(detail=True, methods=['patch'])
+    @action(detail=True, methods=['post'])
     def update_single_status(self, request, pk=None):
         instance = self.get_object()
         instance.status = request.data.get('status', instance.status)
@@ -202,6 +234,8 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['patch'])
     def drag_drop(self, request, pk=None):
         instance = self.get_object()
+        if _is_past_period(instance):
+            return Response({'error': 'No se puede reagendar un periodo vencido'}, status=status.HTTP_400_BAD_REQUEST)
         from datetime import datetime
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
@@ -242,6 +276,8 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         desde = request.query_params.get('desde')
         hasta = request.query_params.get('hasta')
         user_id = request.query_params.get('user_id')
+        group_by = request.query_params.get('group_by')
+        year_param = request.query_params.get('year')
         qs = self.get_queryset()
         if desde:
             qs = qs.filter(start_date__gte=desde)
@@ -250,8 +286,11 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         if user_id:
             try:
                 u = User.objects.get(id=user_id)
-                uos = OrganizationalUnit.objects.filter(responsible=u)
-                qs = qs.filter(activity__organizational_unit__in=uos)
+                uos = get_user_unit_tree(u)
+                qs = qs.filter(
+                    Q(activity__organizational_unit__in=uos) |
+                    Q(activity__activityorgunit__organizational_unit__in=uos)
+                )
             except User.DoesNotExist:
                 pass
 
@@ -266,6 +305,39 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
             if total == 0:
                 return 0
             return round(val / total * 100, 1)
+
+        if group_by == 'uo':
+            from django.db.models import Count
+            uo_stats = qs.values('activity__organizational_unit__name').annotate(
+                total=Count('id'),
+                cumplidas=Count('id', filter=Q(status='CUMPLIDO')),
+            ).order_by('-total')
+            by_uo = []
+            for us in uo_stats:
+                by_uo.append({
+                    'org_unit': us['activity__organizational_unit__name'] or 'Sin UO',
+                    'total': us['total'],
+                    'cumplidas': us['cumplidas'],
+                })
+            return Response({'by_uo': by_uo})
+
+        if group_by == 'month':
+            try:
+                year = int(year_param) if year_param else (int(desde[:4]) if desde else datetime.date.today().year)
+            except (ValueError, TypeError):
+                return Response({'error': 'year debe ser un número válido'}, status=400)
+            by_month = []
+            for m in range(1, 13):
+                m_start = datetime.date(year, m, 1)
+                m_end = datetime.date(year + (1 if m == 12 else 0), (1 if m == 12 else m + 1), 1) - datetime.timedelta(days=1)
+                m_total = qs.filter(start_date__lte=m_end, end_date__gte=m_start).count()
+                m_cumplidas = qs.filter(start_date__lte=m_end, end_date__gte=m_start, status='CUMPLIDO').count()
+                by_month.append({
+                    'month': f'{year}-{m:02d}',
+                    'total': m_total,
+                    'cumplidas': m_cumplidas,
+                })
+            return Response({'by_month': by_month})
 
         try:
             page = int(request.query_params.get('page', 1))
@@ -291,18 +363,6 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
                 'is_modified': sp.is_modified,
             })
 
-        monthly_data = {}
-        if desde and hasta:
-            try:
-                year = int(desde[:4])
-            except (ValueError, TypeError):
-                return Response({'error': 'desde debe ser una fecha válida (YYYY-MM-DD)'}, status=400)
-            for m in range(1, 13):
-                m_start = datetime.date(year, m, 1)
-                m_end = datetime.date(year + (1 if m == 12 else 0), (1 if m == 12 else m + 1), 1) - datetime.timedelta(days=1)
-                m_total = qs.filter(start_date__lte=m_end, end_date__gte=m_start).count()
-                monthly_data[f'month_{m:02d}'] = m_total
-
         return Response({
             'total': total,
             'cumplidas': cumplidas,
@@ -317,7 +377,6 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
             'detalle_count': len(detalle),
             'detalle_total': total,
             'detalle': detalle,
-            **monthly_data,
         })
 
     @action(detail=False, methods=['get'])
@@ -345,11 +404,12 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
         if user_id:
             try:
                 u = User.objects.get(id=user_id)
-                uos = OrganizationalUnit.objects.filter(responsible=u)
+                uos = get_user_unit_tree(u)
                 mapped_period_ids = SchedulePeriodMapping.objects.filter(user=u).values_list('schedule_period_id', flat=True)
                 mapped_act_ids = ActivityMapping.objects.filter(user=u).values_list('activity_id', flat=True)
                 qs = qs.filter(
                     Q(activity__organizational_unit__in=uos) |
+                    Q(activity__activityorgunit__organizational_unit__in=uos) |
                     Q(id__in=mapped_period_ids) |
                     Q(activity_id__in=mapped_act_ids)
                 )
@@ -393,7 +453,7 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def pending_cronograms_approval(self, request):
         user = request.user
-        uos = OrganizationalUnit.objects.filter(responsible=user)
+        uos = get_user_unit_tree(user)
         qs = ScheduleOrgUnit.objects.filter(
             organizational_unit__in=uos,
             status__in=['', 'Re-Enviado']
@@ -414,28 +474,39 @@ class SchedulePeriodViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def approve_cronogram_org_unit(self, request):
         ids = request.data.get('ids', [])
-        ScheduleOrgUnit.objects.filter(id__in=ids).update(status='Aprobado')
-        for sou in ScheduleOrgUnit.objects.filter(id__in=ids).select_related('schedule_period__activity', 'organizational_unit__responsible'):
+        user_uos = get_user_unit_tree(request.user)
+        if request.user.is_staff or has_any_role(request.user, [ROLE_DIRECTOR]):
+            user_uos = OrganizationalUnit.objects.all()
+        for sou in ScheduleOrgUnit.objects.filter(id__in=ids, organizational_unit__in=user_uos).select_related('schedule_period__activity', 'organizational_unit__responsible'):
+            sou.status = 'Aprobado'
+            sou.save()
             SchedulePeriodMapping.objects.get_or_create(
                 schedule_period=sou.schedule_period,
                 user=request.user
             )
+            meta_approve_cron = {'period_id': sou.schedule_period_id, 'activity_id': sou.schedule_period.activity_id, 'activity_desc': sou.schedule_period.activity.description[:80]}
             for u in [sou.schedule_period.activity.created_by, sou.organizational_unit.responsible]:
                 if u and u != request.user:
                     _create_notification(u, f'Cronograma aprobado: {sou.schedule_period.activity.description[:80]}', 'approval',
-                                         related_object_id=sou.schedule_period_id, related_object_type='SchedulePeriod')
+                                         related_object_id=sou.schedule_period_id, related_object_type='SchedulePeriod',
+                                         meta={**meta_approve_cron, 'user_id': u.id, 'user_name': u.display_name})
         return Response({'ok': True})
 
     @action(detail=False, methods=['post'])
     def reject_cronogram_org_unit(self, request):
         ids = request.data.get('ids', [])
-        for sou in ScheduleOrgUnit.objects.filter(id__in=ids).select_related('schedule_period__activity', 'organizational_unit__responsible'):
+        user_uos = get_user_unit_tree(request.user)
+        if request.user.is_staff or has_any_role(request.user, [ROLE_DIRECTOR]):
+            user_uos = OrganizationalUnit.objects.all()
+        for sou in ScheduleOrgUnit.objects.filter(id__in=ids, organizational_unit__in=user_uos).select_related('schedule_period__activity', 'organizational_unit__responsible'):
             sou.status = 'Rechazado'
             sou.save()
+            meta_reject_cron = {'period_id': sou.schedule_period_id, 'activity_id': sou.schedule_period.activity_id, 'activity_desc': sou.schedule_period.activity.description[:80]}
             for u in [sou.schedule_period.activity.created_by, sou.organizational_unit.responsible]:
                 if u and u != request.user:
                     _create_notification(u, f'Cronograma rechazado: {sou.schedule_period.activity.description[:80]}', 'rejection',
-                                         related_object_id=sou.schedule_period_id, related_object_type='SchedulePeriod')
+                                         related_object_id=sou.schedule_period_id, related_object_type='SchedulePeriod',
+                                         meta={**meta_reject_cron, 'user_id': u.id, 'user_name': u.display_name})
         log_action(request, 'Cronograma', f'Rechazó cronogramas: {ids}')
         return Response({'ok': True})
 
@@ -444,6 +515,11 @@ class SchedulePeriodMappingViewSet(viewsets.ModelViewSet):
     queryset = SchedulePeriodMapping.objects.all()
     serializer_class = SchedulePeriodMappingSerializer
 
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [HasRole(ROLE_PLANNER, ROLE_DIRECTOR)]
+        return [IsAuthenticated()]
+
 
 class ScheduleOrgUnitViewSet(viewsets.ModelViewSet):
     queryset = ScheduleOrgUnit.objects.all().select_related('organizational_unit')
@@ -451,9 +527,21 @@ class ScheduleOrgUnitViewSet(viewsets.ModelViewSet):
     filterset_fields = ['schedule_period', 'organizational_unit', 'status']
     search_fields = ['organizational_unit__name']
 
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [HasRole(ROLE_PLANNER, ROLE_DIRECTOR)]
+        return [IsAuthenticated()]
+
     @action(detail=True, methods=['post'])
     def re_send(self, request, pk=None):
         sou = self.get_object()
+        if not (request.user.is_staff or has_any_role(request.user, [ROLE_PLANNER, ROLE_DIRECTOR])):
+            if has_any_role(request.user, [ROLE_APPROVER]):
+                uos = get_user_unit_tree(request.user)
+                if sou.organizational_unit not in uos:
+                    return Response({'error': 'No tienes permiso para reenviar esta UO'}, status=403)
+            else:
+                return Response({'error': 'No tienes permiso para reenviar'}, status=403)
         sou.status = 'Re-Enviado'
         sou.save()
         log_action(request, 'CronogramaUO', f'Re-envió cronograma UO: {pk}')
@@ -465,12 +553,28 @@ class WorkDayViewSet(viewsets.ModelViewSet):
     serializer_class = WorkDaySerializer
     filterset_fields = ['user']
 
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated()]
+        return [IsAuthenticated()]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_staff or has_any_role(self.request.user, [ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR]):
+            return qs
+        return qs.filter(user=self.request.user)
+
     @action(detail=False, methods=['post'])
     def save_batch(self, request):
         user_id = request.data.get('user_id')
         days = request.data.get('days', [])
         if not user_id:
             return Response({'error': 'user_id required'}, status=400)
+        if int(user_id) != request.user.pk and not (request.user.is_staff or has_any_role(request.user, [ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR])):
+            return Response({'error': 'No puedes modificar días laborables de otro usuario'}, status=403)
         WorkDay.objects.filter(user_id=user_id).delete()
         for d in days:
             WorkDay.objects.create(user_id=user_id, day=d)
@@ -483,23 +587,48 @@ class ApprovedPlanViewSet(viewsets.ModelViewSet):
     filterset_fields = ['organizational_unit']
     ordering = ['id']
 
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [HasRole(ROLE_PLANNER, ROLE_DIRECTOR)]
+        return [IsAuthenticated()]
+
 
 
 class ReportsViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ReportThrottle]
 
+    def get_permissions(self):
+        return [HasRole(ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR)]
+
+    def _get_scoped_periods(self, request):
+        periods = SchedulePeriod.objects.all().select_related('activity')
+        user = request.user
+        if not (user.is_staff or has_any_role(user, [ROLE_DIRECTOR])):
+            uos = get_user_unit_tree(user)
+            mapped_period_ids = SchedulePeriodMapping.objects.filter(user=user).values_list('schedule_period_id', flat=True)
+            mapped_act_ids = ActivityMapping.objects.filter(user=user).values_list('activity_id', flat=True)
+            periods = periods.filter(
+                Q(activity__organizational_unit__in=uos) |
+                Q(activity__activityorgunit__organizational_unit__in=uos) |
+                Q(id__in=mapped_period_ids) |
+                Q(activity_id__in=mapped_act_ids)
+            ).distinct()
+        return periods
+
     @action(detail=False, methods=['get'])
     def individual(self, request):
         user_id = request.query_params.get('user_id')
-        periods = SchedulePeriod.objects.all().select_related('activity')
+        periods = self._get_scoped_periods(request)
         if user_id:
             try:
                 u = User.objects.get(id=user_id)
-                uos = OrganizationalUnit.objects.filter(responsible=u)
+                uos = get_user_unit_tree(u)
                 mapped = SchedulePeriodMapping.objects.filter(user_id=user_id).values_list('schedule_period_id', flat=True)
                 periods = periods.filter(
-                    Q(activity__organizational_unit__in=uos) | Q(id__in=mapped)
+                    Q(activity__organizational_unit__in=uos) |
+                    Q(activity__activityorgunit__organizational_unit__in=uos) |
+                    Q(id__in=mapped)
                 )
             except User.DoesNotExist:
                 pass
@@ -522,7 +651,7 @@ class ReportsViewSet(viewsets.ViewSet):
     def export_ics(self, request):
         desde = request.query_params.get('desde')
         hasta = request.query_params.get('hasta')
-        periods = SchedulePeriod.objects.all().select_related('activity')
+        periods = self._get_scoped_periods(request)
         if desde:
             periods = periods.filter(start_date__gte=desde)
         if hasta:
@@ -577,7 +706,7 @@ class ReportsViewSet(viewsets.ViewSet):
     def compliance_pdf(self, request):
         desde = request.query_params.get('desde')
         hasta = request.query_params.get('hasta')
-        periods = SchedulePeriod.objects.all()
+        periods = self._get_scoped_periods(request)
         if desde:
             periods = periods.filter(start_date__gte=desde)
         if hasta:
@@ -635,11 +764,16 @@ class ReportsViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def by_uo(self, request):
+        user = request.user
+        if user.is_staff or has_any_role(user, [ROLE_DIRECTOR]):
+            base_uos = OrganizationalUnit.objects.all()
+        else:
+            base_uos = get_user_unit_tree(user)
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Cumplimiento por UO'
         ws.append(['U. Organizativa', 'Total', 'Cumplidas', 'Incumplidas', 'Pendientes', '% Cumplimiento'])
-        uos = OrganizationalUnit.objects.annotate(
+        uos = base_uos.annotate(
             total=Count('activity_set__schedule_periods', distinct=True),
             cumplidas=Count('activity_set__schedule_periods',
                 filter=Q(activity_set__schedule_periods__status='CUMPLIDO'), distinct=True),
@@ -669,8 +803,9 @@ class ReportsViewSet(viewsets.ViewSet):
         ws = wb.active
         ws.title = 'Comparativo Mensual'
         ws.append(['Mes', 'Total', 'Cumplidas', 'Incumplidas', 'Pendientes', '% Cumplimiento'])
+        scoped = self._get_scoped_periods(request)
         for month in range(1, 13):
-            periods = SchedulePeriod.objects.filter(start_date__year=int(year), start_date__month=month)
+            periods = scoped.filter(start_date__year=int(year), start_date__month=month)
             total = periods.count()
             cumplidas = periods.filter(status='CUMPLIDO').count()
             incumplidas = periods.filter(status='INCUMPLIDO').count()
@@ -690,6 +825,13 @@ class ScheduleCommentViewSet(viewsets.ModelViewSet):
     queryset = ScheduleComment.objects.all().select_related('user')
     serializer_class = ScheduleCommentSerializer
     filterset_fields = ['schedule_period']
+
+    def get_permissions(self):
+        if self.action in ['create']:
+            return [HasRole(ROLE_EXECUTOR, ROLE_PLANNER, ROLE_APPROVER, ROLE_DIRECTOR)]
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [HasRole(ROLE_PLANNER, ROLE_DIRECTOR)]
+        return [IsAuthenticated()]
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

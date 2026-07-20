@@ -17,16 +17,21 @@ import useAutoResize from '../hooks/useAutoResize';
 import useKeyboardShortcut from '../hooks/useKeyboardShortcut';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { Plus, X, Check, Edit3, Trash2 } from 'lucide-react';
+import Modal from '../components/Modal';
 import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Schedule() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR]);
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
+  const canEditStatus = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.APPROVER, ROLES.DIRECTOR, ROLES.EXECUTOR]);
+  const canComment = canEditStatus;
   useDocumentTitle(t('page.schedule.title'));
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [count, setCount] = useState(0);
   const pageSize = 50;
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -34,6 +39,8 @@ export default function Schedule() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ activity: '', start_date: '', end_date: '', start_time: '', end_time: '', description: '', observation: '', status: '', is_extraplan: false, has_incidence: false, color: '#1a237e' });
   const [activities, setActivities] = useState([]);
+  const [activitySearch, setActivitySearch] = useState('');
+  const [activityResults, setActivityResults] = useState([]);
   const [editingStatus, setEditingStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState({});
@@ -57,16 +64,19 @@ export default function Schedule() {
 
   useEffect(() => {
     setLoading(true);
+    const params = { page };
+    if (desde) params.start_date__gte = desde;
+    if (hasta) params.end_date__lte = hasta;
     Promise.all([
-      api.get(`/schedule/periods/?page=${page}`),
-      api.get('/activities/?page_size=200')
+      api.get('/schedule/periods/', { params }),
+      api.get('/activities/?page_size=1000')
     ]).then(([res, actRes]) => {
       setPeriods(res.data.results || res.data);
       setCount(res.data.count || res.data.length || 0);
-      setActivities(actRes.data.results || actRes.data);
+      setActivities(actRes.data.results || actRes.data || []);
     }).catch(() => toast.error(t('toast.load_periods_error')))
     .finally(() => setLoading(false));
-  }, [page]);
+  }, [page, desde, hasta]);
 
   useKeyboardShortcut('Escape', () => { if (showForm) closeForm(); });
   useKeyboardShortcut('Escape', () => { if (confirmDelete) setConfirmDelete(null); });
@@ -132,7 +142,7 @@ export default function Schedule() {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      const res = await api.patch(`/schedule/periods/${id}/`, { status: newStatus });
+      const res = await api.post(`/schedule/periods/${id}/update_single_status/`, { status: newStatus });
       setPeriods(periods.map(p => p.id === id ? { ...p, ...res.data } : p));
       toast.success(t('toast.schedule_period_updated'));
     } catch { toast.error(t('toast.save_error')); }
@@ -152,90 +162,115 @@ export default function Schedule() {
         </button>}
       </div>
 
-      {showForm && (
-        <div className="modal-overlay" onClick={closeForm} role="dialog" aria-modal="true" aria-label={editing ? t('page.schedule.edit_title') : t('page.schedule.create_title')}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>{editing ? t('page.schedule.edit_title') : t('page.schedule.create_title')}</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>{t('page.schedule.activity')}</label>
-                <select value={form.activity} onChange={(e) => setForm({...form, activity: e.target.value})} required className={formErrors.activity ? 'input-error' : ''}>
-                  <option value="">{t('form.select')}</option>
-                  {activities.map(a => <option key={a.id} value={a.id}>{a.description}</option>)}
-                </select>
-                {formErrors.activity && <span className="field-error">{formErrors.activity}</span>}
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>{t('page.schedule.start_date')}</label>
-                  <input type="date" value={form.start_date} onChange={(e) => setForm({...form, start_date: e.target.value})} required />
+      <Modal open={showForm} onClose={closeForm} aria-label={editing ? t('page.schedule.edit_title') : t('page.schedule.create_title')}>
+        <h2>{editing ? t('page.schedule.edit_title') : t('page.schedule.create_title')}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>{t('page.schedule.activity')}</label>
+            <input type="text" placeholder={t('common.search') + '...'} value={activitySearch}
+              onChange={(e) => setActivitySearch(e.target.value)}
+              style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }} />
+            <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius, 4px)' }}>
+              {(activitySearch
+                ? activities.filter(a => (a.description || '').toLowerCase().includes(activitySearch.toLowerCase()))
+                : activities
+              ).map(a => (
+                <div key={a.id}
+                  onClick={() => { setForm({...form, activity: a.id}); setActivitySearch(a.description || ''); }}
+                  style={{ padding: '0.3rem 0.5rem', cursor: 'pointer', background: form.activity === a.id ? 'var(--accent-light, #e3f2fd)' : 'transparent', fontSize: '0.85rem' }}>
+                  {a.description || `#${a.id}`}
                 </div>
-                <div className="form-group">
-                  <label>{t('page.schedule.end_date')}</label>
-                  <input type="date" value={form.end_date} onChange={(e) => setForm({...form, end_date: e.target.value})} required />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>{t('page.schedule.start_time')}</label>
-                  <input type="time" value={form.start_time} onChange={(e) => setForm({...form, start_time: e.target.value})} required />
-                </div>
-                <div className="form-group">
-                  <label>{t('page.schedule.end_time')}</label>
-                  <input type="time" value={form.end_time} onChange={(e) => setForm({...form, end_time: e.target.value})} required />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>{t('page.schedule.description')}</label>
-                <textarea value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} placeholder={t('page.schedule.description')} ref={descRef} maxLength={500} />
-                <span className="char-count">{form.description.length}/500</span>
-              </div>
-              <div className="form-group">
-                <label>{t('page.schedule.observation')}</label>
-                <textarea value={form.observation} onChange={(e) => setForm({...form, observation: e.target.value})} placeholder={t('page.schedule.observation')} ref={obsRef} maxLength={500} />
-                <span className="char-count">{form.observation.length}/500</span>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>{t('page.schedule.status')}</label>
-                  <select value={form.status} onChange={(e) => setForm({...form, status: e.target.value})}>
-                    <option value="">--</option>
-                    <option value="PENDIENTE">{t('badge.pending')}</option>
-                    <option value="CUMPLIDO">{t('badge.cumplido')}</option>
-                    <option value="INCUMPLIDO">{t('badge.incumplido')}</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>{t('page.schedule.color')}</label>
-                  <input type="color" value={form.color} onChange={(e) => setForm({...form, color: e.target.value})} />
-                </div>
-              </div>
-              <div className="form-row" style={{ marginBottom: '1rem' }}>
-                <label className="form-check">
-                  <input type="checkbox" checked={form.is_extraplan} onChange={(e) => setForm({...form, is_extraplan: e.target.checked})} />
-                  <span>{t('page.schedule.extraplan')}</span>
-                </label>
-                <label className="form-check">
-                  <input type="checkbox" checked={form.has_incidence} onChange={(e) => setForm({...form, has_incidence: e.target.checked})} />
-                  <span>{t('page.schedule.incidence')}</span>
-                </label>
-              </div>
-              <div className="form-actions">
-                  <button className="btn btn-icon btn-secondary" type="button" onClick={closeForm} title={t('page.schedule.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? (editing ? t('page.schedule.updating') : t('page.schedule.creating')) : (editing ? t('page.schedule.update') : t('page.schedule.create'))}><Check size={16} /></button>
-              </div>
-            </form>
+              ))}
+              {activitySearch && activities.filter(a => (a.description || '').toLowerCase().includes(activitySearch.toLowerCase())).length === 0 && (
+                <div style={{ padding: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t('common.no_results')}</div>
+              )}
+            </div>
+            {formErrors.activity && <span className="field-error">{formErrors.activity}</span>}
           </div>
-        </div>
-      )}
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('page.schedule.start_date')}</label>
+              <input type="date" value={form.start_date} onChange={(e) => setForm({...form, start_date: e.target.value})} required />
+            </div>
+            <div className="form-group">
+              <label>{t('page.schedule.end_date')}</label>
+              <input type="date" value={form.end_date} onChange={(e) => setForm({...form, end_date: e.target.value})} required />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('page.schedule.start_time')}</label>
+              <input type="time" value={form.start_time} onChange={(e) => setForm({...form, start_time: e.target.value})} required />
+            </div>
+            <div className="form-group">
+              <label>{t('page.schedule.end_time')}</label>
+              <input type="time" value={form.end_time} onChange={(e) => setForm({...form, end_time: e.target.value})} required />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>{t('page.schedule.description')}</label>
+            <textarea value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} placeholder={t('page.schedule.description')} ref={descRef} maxLength={500} />
+            <span className="char-count">{form.description.length}/500</span>
+          </div>
+          <div className="form-group">
+            <label>{t('page.schedule.observation')}</label>
+            <textarea value={form.observation} onChange={(e) => setForm({...form, observation: e.target.value})} placeholder={t('page.schedule.observation')} ref={obsRef} maxLength={500} />
+            <span className="char-count">{form.observation.length}/500</span>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('page.schedule.status')}</label>
+              <select value={form.status} onChange={(e) => setForm({...form, status: e.target.value})}>
+                <option value="">--</option>
+                <option value="PENDIENTE">{t('badge.pending')}</option>
+                <option value="CUMPLIDO">{t('badge.cumplido')}</option>
+                <option value="INCUMPLIDO">{t('badge.incumplido')}</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>{t('page.schedule.color')}</label>
+              <input type="color" value={form.color} onChange={(e) => setForm({...form, color: e.target.value})} />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom: '1rem' }}>
+            <label className="form-check">
+              <input type="checkbox" checked={form.is_extraplan} onChange={(e) => setForm({...form, is_extraplan: e.target.checked})} />
+              <span>{t('page.schedule.extraplan')}</span>
+            </label>
+            <label className="form-check">
+              <input type="checkbox" checked={form.has_incidence} onChange={(e) => setForm({...form, has_incidence: e.target.checked})} />
+              <span>{t('page.schedule.incidence')}</span>
+            </label>
+          </div>
+          <div className="form-actions">
+              <button className="btn btn-icon btn-secondary" type="button" onClick={closeForm} title={t('page.schedule.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? (editing ? t('page.schedule.updating') : t('page.schedule.creating')) : (editing ? t('page.schedule.update') : t('page.schedule.create'))}><Check size={16} /></button>
+          </div>
+        </form>
+      </Modal>
 
       {editing && (
-        <CommentsSection endpoint="schedule/comments" filterKey="schedule_period" filterValue={editing} />
+        <CommentsSection endpoint="schedule/comments" filterKey="schedule_period" filterValue={editing} readOnly={!canComment} />
       )}
       {editing && (
         <HistorySection modelo="PeriodoCronograma" objectId={editing} />
       )}
 
+      <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label style={{ fontSize: '0.8rem' }}>{t('page.schedule.from')}</label>
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={{ width: '150px' }} />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label style={{ fontSize: '0.8rem' }}>{t('page.schedule.to')}</label>
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={{ width: '150px' }} />
+        </div>
+        {(desde || hasta) && (
+          <button className="btn btn-sm btn-secondary" onClick={() => { setDesde(''); setHasta(''); }}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
       <div className="card">
         {loading ? <SkeletonTable rows={8} cols={8} /> : periods.length === 0 ? (
           <div className="empty-state">{t('page.schedule.empty')}</div>
@@ -264,8 +299,8 @@ export default function Schedule() {
                           <option value="INCUMPLIDO">{t('badge.incumplido')}</option>
                         </select>
                       ) : (
-                        <span className={`badge ${p.status === 'CUMPLIDO' ? 'badge-success' : p.status === 'INCUMPLIDO' ? 'badge-danger' : 'badge-neutral'} ${canManage ? 'inline-edit-trigger' : ''}`}
-                          onClick={() => canManage && setEditingStatus(p.id)}>
+                         <span className={`badge ${p.status === 'CUMPLIDO' ? 'badge-success' : p.status === 'INCUMPLIDO' ? 'badge-danger' : 'badge-neutral'} ${canEditStatus ? 'inline-edit-trigger' : ''}`}
+                          onClick={() => canEditStatus && setEditingStatus(p.id)}>
                           {p.status || 'PENDIENTE'}
                         </span>
                       )}

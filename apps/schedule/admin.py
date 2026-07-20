@@ -53,9 +53,9 @@ class WorkDayAdmin(admin.ModelAdmin):
 
 @admin.register(ApprovedPlan)
 class ApprovedPlanAdmin(admin.ModelAdmin):
-    list_display = ['organizational_unit', 'plan_date', 'approved_date']
-    list_filter = ['plan_date']
-    autocomplete_fields = ['organizational_unit']
+    list_display = ['organizational_unit', 'activity', 'start_date', 'end_date', 'approved_by']
+    list_filter = ['start_date']
+    autocomplete_fields = ['organizational_unit', 'activity']
 
 
 @admin.register(ScheduleComment)

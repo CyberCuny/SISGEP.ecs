@@ -1,3 +1,5 @@
+import datetime
+
 from django.db import models
 from apps.core.models import User, OrganizationalUnit
 from apps.activities.models import Activity
@@ -71,13 +73,16 @@ class WorkDay(models.Model):
 
 
 class ApprovedPlan(models.Model):
-    organizational_unit = models.ForeignKey(OrganizationalUnit, on_delete=models.CASCADE, db_column='id_unidad_organizativa')
-    plan_date = models.DateField(verbose_name='Fecha del Plan')
-    approved_date = models.DateField(verbose_name='Fecha Aprobado')
+    organizational_unit = models.ForeignKey(OrganizationalUnit, on_delete=models.CASCADE, db_column='id_unidad_organizativa', verbose_name='Unidad Organizativa')
+    activity = models.ForeignKey(Activity, on_delete=models.CASCADE, db_column='id_actividad', blank=True, null=True, verbose_name='Actividad')
+    start_date = models.DateField(db_column='fecha_inicio', verbose_name='Fecha Inicio', default=datetime.date.today)
+    end_date = models.DateField(db_column='fecha_fin', verbose_name='Fecha Fin', default=datetime.date.today)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, db_column='id_aprobado_por', blank=True, null=True, related_name='approved_plans', verbose_name='Aprobado Por')
+    observations = models.TextField(db_column='observaciones', blank=True, null=True, verbose_name='Observaciones')
+    approved_date = models.DateTimeField(auto_now_add=True, db_column='fecha_aprobacion', verbose_name='Fecha de Aprobaci\u00f3n')
 
     class Meta:
         db_table = 'plan_aprobado'
-        unique_together = ('organizational_unit', 'plan_date')
         verbose_name = 'Plan Aprobado'
         verbose_name_plural = 'Planes Aprobados'
 

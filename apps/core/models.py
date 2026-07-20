@@ -11,6 +11,7 @@ class Role(models.Model):
         db_table = 'rol'
         verbose_name = 'Rol'
         verbose_name_plural = 'Roles'
+        ordering = ['name']
 
     def __str__(self):
         return self.name
@@ -174,6 +175,7 @@ class EmailConfig(models.Model):
         db_table = 'configuracion_email'
         verbose_name = 'Configuración Email'
         verbose_name_plural = 'Configuración Email'
+        ordering = ['id']
 
     @property
     def password(self):
@@ -208,6 +210,7 @@ class SystemConfig(models.Model):
         db_table = 'configuracion_sistema'
         verbose_name = 'Configuración Sistema'
         verbose_name_plural = 'Configuraciones Sistema'
+        ordering = ['key']
 
     def __str__(self):
         return self.key

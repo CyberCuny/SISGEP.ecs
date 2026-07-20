@@ -1,33 +1,101 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, Check, Save } from 'lucide-react';
+import { Plus, X, Check, Search } from 'lucide-react';
 import api from '../services/api';
-import { scheduleService } from '../services';
 import AttachmentsSection from '../components/AttachmentsSection';
 import CommentsSection from '../components/CommentsSection';
 import HistorySection from '../components/HistorySection';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
+
+function UserMultiSelect({ users, selectedIds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+
+  const filtered = search
+    ? users.filter(u => (u.display_name || u.username || '').toLowerCase().includes(search.toLowerCase()))
+    : users;
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggle = useCallback((uid) => {
+    onChange(selectedIds.includes(uid) ? selectedIds.filter(x => x !== uid) : [...selectedIds, uid]);
+  }, [selectedIds, onChange]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.25rem' }}>
+        {selectedIds.map(id => {
+          const u = users.find(x => x.id === id);
+          return u ? (
+            <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', background: 'var(--bg-hover)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem' }}>
+              {u.display_name || u.username}
+              <button type="button" onClick={() => onChange(selectedIds.filter(x => x !== id))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color: '#d32f2f' }}><X size={12} /></button>
+            </span>
+          ) : null;
+        })}
+      </div>
+      <div style={{ position: 'relative' }}>
+        <input ref={inputRef} type="text" placeholder="Buscar..." value={search}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+          style={{ width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.85rem', boxSizing: 'border-box', background: 'var(--bg-card)', color: 'var(--text)' }} />
+        {open && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-card)', zIndex: 20, borderRadius: '0 0 4px 4px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Sin resultados</div>
+            ) : (
+              filtered.map(u => (
+                <div key={u.id} onMouseDown={(e) => { e.preventDefault(); toggle(u.id); }}
+                  style={{ padding: '0.35rem 0.5rem', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', background: selectedIds.includes(u.id) ? 'var(--bg-hover)' : 'transparent', color: 'var(--text)' }}
+                  onMouseEnter={(e) => { if (!selectedIds.includes(u.id)) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={(e) => { if (!selectedIds.includes(u.id)) e.currentTarget.style.background = 'transparent'; }}>
+                  <span style={{ width: '1em', color: selectedIds.includes(u.id) ? 'var(--accent)' : 'transparent' }}>{selectedIds.includes(u.id) ? '✓' : '○'}</span>
+                  {u.display_name || u.username}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ActivityForm() {
   const { t } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const isEditing = Boolean(id);
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
+  if (!canManage) {
+    return <div className="page-header"><h1>{isEditing ? t('page.activity_form.edit_title') : t('page.activity_form.create_title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.activity_form.no_access')}</p></div>;
+  }
   const [loading, setLoading] = useState(false);
   const [catalogs, setCatalogs] = useState({
     categories: [], types: [], arcs: [], objectives: [],
-    criteria: [], guidelines: [], units: [],
+    criteria: [], guidelines: [], units: [], users: [],
   });
   const [form, setForm] = useState({
-    description: '', place: '', responsible: '', participants: '',
+    description: '', place: '',
     category: '', activity_type: '', arc: '', associated_objective: '',
     measurement_criterion: '', organizational_unit: '',
     is_important: false, is_general: false, color: '#1976d2',
     guideline_ids: [],
   });
+  const [responsibleIds, setResponsibleIds] = useState([]);
+  const [participantIds, setParticipantIds] = useState([]);
   const [error, setError] = useState('');
   const [schedulePeriods, setSchedulePeriods] = useState([]);
-  const [existingPeriodIds, setExistingPeriodIds] = useState(new Set());
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     document.title = isEditing ? t('page.activity_form.edit_title') : t('page.activity_form.create_title');
@@ -39,16 +107,16 @@ export default function ActivityForm() {
       api.get('/criteria/').then(r => r.data.results || r.data || []),
       api.get('/guidelines/').then(r => r.data.results || r.data || []),
       api.get('/organizational-units/').then(r => r.data.results || r.data || []),
+      api.get('/users/?page_size=500').then(r => r.data.results || r.data || []),
     ];
-    Promise.all(promises).then(([cat, typ, arc, obj, cri, gui, uos]) => {
-      setCatalogs({ categories: cat, types: typ, arcs: arc, objectives: obj, criteria: cri, guidelines: gui, units: uos });
+    Promise.all(promises).then(([cat, typ, arc, obj, cri, gui, uos, usrs]) => {
+      setCatalogs({ categories: cat, types: typ, arcs: arc, objectives: obj, criteria: cri, guidelines: gui, units: uos, users: usrs });
     });
     if (isEditing) {
       api.get(`/activities/${id}/`).then((res) => {
         const d = res.data;
         setForm({
           description: d.description || '', place: d.place || '',
-          responsible: d.responsible || '', participants: d.participants || '',
           category: d.category || '', activity_type: d.activity_type || '',
           arc: d.arc || '', associated_objective: d.associated_objective || '',
           measurement_criterion: d.measurement_criterion || '',
@@ -56,8 +124,10 @@ export default function ActivityForm() {
           is_important: d.is_important || false, is_general: d.is_general || false,
           color: d.color || '#1976d2', guideline_ids: d.guideline_ids || [],
         });
+        setResponsibleIds(d.responsible_user_id_list || []);
+        setParticipantIds(d.participant_user_id_list || []);
       });
-      scheduleService.list({ activity_id: id }).then((res) => {
+      api.get(`/schedule/periods/?activity_id=${id}&page_size=500`).then((res) => {
         const periods = (res.data.results || res.data || []).map(p => ({
           _localId: p.id,
           id: p.id,
@@ -67,7 +137,6 @@ export default function ActivityForm() {
           end_time: p.end_time || '',
         }));
         setSchedulePeriods(periods);
-        setExistingPeriodIds(new Set(periods.map(p => p.id)));
       });
     }
   }, [id]);
@@ -102,19 +171,25 @@ export default function ActivityForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setSaving(true);
     try {
+      const payload = {
+        ...form,
+        guideline_ids: form.guideline_ids,
+        responsible_user_ids: responsibleIds,
+        participant_user_ids: participantIds,
+        schedule_periods: schedulePeriods.map(p => ({
+          id: p.id || undefined,
+          start_date: p.start_date,
+          end_date: p.end_date,
+          start_time: p.start_time,
+          end_time: p.end_time,
+        })),
+      };
       if (isEditing) {
-        await api.patch(`/activities/${id}/`, form);
-        const currentIds = new Set(schedulePeriods.map(p => p.id).filter(Boolean));
-        const toDelete = [...existingPeriodIds].filter(pid => !currentIds.has(pid));
-        const toCreate = schedulePeriods.filter(p => !p.id);
-        await Promise.all(toDelete.map(pid => scheduleService.delete(pid)));
-        await Promise.all(toCreate.map(p => scheduleService.create({ ...p, activity: id, _localId: undefined, id: undefined })));
+        await api.patch(`/activities/${id}/`, payload);
       } else {
-        const res = await api.post('/activities/', form);
-        const newId = res.data.id;
-        await Promise.all(schedulePeriods.map(p => scheduleService.create({ start_date: p.start_date, end_date: p.end_date, start_time: p.start_time, end_time: p.end_time, activity: newId })));
+        await api.post('/activities/', payload);
       }
       navigate('/activities');
     } catch (err) {
@@ -123,7 +198,7 @@ export default function ActivityForm() {
           : Object.values(err.response.data).flat().filter(Boolean).join('. '))
         : t('page.activity_form.error'));
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -149,26 +224,24 @@ export default function ActivityForm() {
               <input type="color" name="color" value={form.color} onChange={handleChange} />
             </div>
           </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>{t('form.responsibles')}</label>
-              <input name="responsible" value={form.responsible} onChange={handleChange} placeholder={t('form.responsibles')} />
-            </div>
-            <div className="form-group">
-              <label>{t('form.participants')}</label>
-              <input name="participants" value={form.participants} onChange={handleChange} placeholder={t('form.participants')} />
-            </div>
+          <div className="form-group">
+            <label>{t('form.organizational_unit')}</label>
+            <select name="organizational_unit" value={form.organizational_unit} onChange={handleChange}>
+              <option value="">{t('form.select')}</option>
+              {catalogs.units.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Responsables</label>
+            <UserMultiSelect users={catalogs.users} selectedIds={responsibleIds} onChange={setResponsibleIds} />
+          </div>
+          <div className="form-group">
+            <label>Participantes</label>
+            <UserMultiSelect users={catalogs.users} selectedIds={participantIds} onChange={setParticipantIds} />
           </div>
           <div className="form-row">
-            <div className="form-group">
-              <label>{t('form.organizational_unit')}</label>
-              <select name="organizational_unit" value={form.organizational_unit} onChange={handleChange}>
-                <option value="">{t('form.select')}</option>
-                {catalogs.units.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-            </div>
             <div className="form-group">
               <label>{t('form.category')}</label>
               <select name="category" value={form.category} onChange={handleChange}>
@@ -178,8 +251,6 @@ export default function ActivityForm() {
                 ))}
               </select>
             </div>
-          </div>
-          <div className="form-row">
             <div className="form-group">
               <label>{t('form.activity_type')}</label>
               <select name="activity_type" value={form.activity_type} onChange={handleChange}>
@@ -189,6 +260,8 @@ export default function ActivityForm() {
                 ))}
               </select>
             </div>
+          </div>
+          <div className="form-row">
             <div className="form-group">
               <label>{t('form.arc')}</label>
               <select name="arc" value={form.arc} onChange={handleChange}>
@@ -198,8 +271,6 @@ export default function ActivityForm() {
                 ))}
               </select>
             </div>
-          </div>
-          <div className="form-row">
             <div className="form-group">
               <label>{t('form.associated_objective')}</label>
               <select name="associated_objective" value={form.associated_objective} onChange={handleChange}>
@@ -209,6 +280,8 @@ export default function ActivityForm() {
                 ))}
               </select>
             </div>
+          </div>
+          <div className="form-row">
             <div className="form-group">
               <label>{t('form.measurement_criterion')}</label>
               <select name="measurement_criterion" value={form.measurement_criterion} onChange={handleChange}>
@@ -273,7 +346,7 @@ export default function ActivityForm() {
           </div>
           <div className="form-actions">
             <button className="btn btn-icon btn-secondary" type="button" onClick={() => navigate('/activities')} title={t('common.cancel')}><X size={16} /></button>
-            <button className="btn btn-icon btn-primary" type="submit" disabled={loading} title={loading ? t('common.saving') : (isEditing ? t('common.update') : t('page.activity_form.create'))}>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (isEditing ? t('common.update') : t('page.activity_form.create'))}>
               <Check size={16} />
             </button>
           </div>
@@ -281,8 +354,8 @@ export default function ActivityForm() {
       </div>
       {isEditing && (
         <>
-        <AttachmentsSection activityId={id} />
-        <CommentsSection endpoint="activity-comments" filterKey="activity" filterValue={id} />
+        <AttachmentsSection activityId={id} readOnly={!canManage} />
+        <CommentsSection endpoint="activity-comments" filterKey="activity" filterValue={id} readOnly={!canManage} />
         <HistorySection modelo="Actividad" objectId={id} />
         </>
       )}

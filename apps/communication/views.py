@@ -28,7 +28,8 @@ class MessageViewSet(viewsets.ModelViewSet):
         msg = serializer.save(sender=self.request.user)
         log_action(self.request, 'Mensaje', f'Envió mensaje: {msg.subject[:80]}', object_id=msg.pk)
         _create_notification(msg.recipient, f'Nuevo mensaje: {msg.subject[:80]}', 'message',
-                             related_object_id=msg.pk, related_object_type='Message')
+                             related_object_id=msg.pk, related_object_type='Message',
+                             meta={'message_id': msg.pk, 'message_subject': msg.subject[:80], 'sender_id': msg.sender.id, 'sender_name': msg.sender.display_name})
 
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
@@ -59,7 +60,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         return Response({'count': count})
 
 
-class NotificationViewSet(viewsets.ModelViewSet):
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
 

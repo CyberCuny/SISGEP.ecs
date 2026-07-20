@@ -3,11 +3,14 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { unitService } from '../services';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 import Spinner from '../components/Spinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, Edit3, Trash2, X, Check, List, GitBranch, Users } from 'lucide-react';
+import Modal from '../components/Modal';
 
-function TreeNode({ node, level = 0, onEdit, onDelete, onShowUsers, onDrop, onDragStart, draggedId }) {
+function TreeNode({ node, level = 0, canManage, onEdit, onDelete, onShowUsers, onDrop, onDragStart, draggedId }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(node.expanded || false);
   const [dropZone, setDropZone] = useState(null);
@@ -47,8 +50,8 @@ function TreeNode({ node, level = 0, onEdit, onDelete, onShowUsers, onDrop, onDr
   return (
     <div
       ref={rowRef}
-      draggable
-      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(node.id); }}
+      draggable={canManage}
+      onDragStart={(e) => { if (!canManage) return; e.dataTransfer.effectAllowed = 'move'; onDragStart(node.id); }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -73,13 +76,13 @@ function TreeNode({ node, level = 0, onEdit, onDelete, onShowUsers, onDrop, onDr
         </span>
         {isAccessible && <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>{t('badge.access')}</span>}
         <div style={{ display: 'flex', gap: '0.2rem', marginLeft: '0.5rem' }}>
-          <button className="btn btn-icon btn-sm btn-primary" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }} onClick={() => onEdit(node)} title={t('common.edit')}><Edit3 size={12} /></button>
+          {canManage && <button className="btn btn-icon btn-sm btn-primary" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }} onClick={() => onEdit(node)} title={t('common.edit')}><Edit3 size={12} /></button>}
           <button className="btn btn-icon btn-sm btn-secondary" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }} onClick={() => onShowUsers(node)} title={t('nav.users')}><Users size={12} /></button>
-          <button className="btn btn-icon btn-sm btn-danger" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }} onClick={() => onDelete(node.id)} title={t('common.delete')}><Trash2 size={12} /></button>
+          {canManage && <button className="btn btn-icon btn-sm btn-danger" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }} onClick={() => onDelete(node.id)} title={t('common.delete')}><Trash2 size={12} /></button>}
         </div>
       </div>
       {open && hasChildren && node.children.map((child, i) => (
-        <TreeNode key={child.id || i} node={child} level={level + 1} onEdit={onEdit} onDelete={onDelete} onShowUsers={onShowUsers} onDrop={onDrop} onDragStart={onDragStart} draggedId={draggedId} />
+        <TreeNode key={child.id || i} node={child} level={level + 1} canManage={canManage} onEdit={onEdit} onDelete={onDelete} onShowUsers={onShowUsers} onDrop={onDrop} onDragStart={onDragStart} draggedId={draggedId} />
       ))}
     </div>
   );
@@ -87,6 +90,8 @@ function TreeNode({ node, level = 0, onEdit, onDelete, onShowUsers, onDrop, onDr
 
 export default function Units() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
   const [units, setUnits] = useState([]);
   const [users, setUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -184,79 +189,71 @@ export default function Units() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setViewMode('table')}><List size={14} /> {t('page.units.view_table')}</button>
           <button className={`btn btn-sm ${viewMode === 'tree' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setViewMode('tree')}><GitBranch size={14} /> {t('page.units.view_tree')}</button>
-          <button className="btn btn-icon btn-primary" onClick={() => { setEditingId(null); setForm({ name: '', parent: '', responsible: '' }); setShowForm(true); }} title={t('page.units.new')}>
+          {canManage && <button className="btn btn-icon btn-primary" onClick={() => { setEditingId(null); setForm({ name: '', parent: '', responsible: '' }); setShowForm(true); }} title={t('page.units.new')}>
             <Plus size={16} />
-          </button>
+          </button>}
         </div>
       </div>
 
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-content" style={{ width: '450px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editingId ? t('page.units.edit_title') : t('page.units.create_title')}</h2>
-            {formError && <div className="alert alert-error">{formError}</div>}
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>{t('page.units.name')}</label>
-                <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required placeholder={t('common.name')} />
-              </div>
-              <div className="form-group">
-                <label>{t('page.units.parent_unit')}</label>
-                <select value={form.parent} onChange={(e) => setForm({...form, parent: e.target.value})}>
-                  <option value="">{t('page.units.none_root')}</option>
-                  {units.filter(u => u.id !== editingId).map((u) => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>{t('page.units.responsible')}</label>
-                <select value={form.responsible} onChange={(e) => setForm({...form, responsible: e.target.value})}>
-                  <option value="">{t('page.units.select')}</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-actions">
-                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.units.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (editingId ? t('page.units.update') : t('page.units.create'))}>
-                  <Check size={16} />
-                </button>
-              </div>
-            </form>
+      <Modal open={showForm} onClose={() => setShowForm(false)} width="450px">
+        <h2>{editingId ? t('page.units.edit_title') : t('page.units.create_title')}</h2>
+        {formError && <div className="alert alert-error">{formError}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>{t('page.units.name')}</label>
+            <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required placeholder={t('common.name')} />
           </div>
-        </div>
-      )}
+          <div className="form-group">
+            <label>{t('page.units.parent_unit')}</label>
+            <select value={form.parent} onChange={(e) => setForm({...form, parent: e.target.value})}>
+              <option value="">{t('page.units.none_root')}</option>
+              {units.filter(u => u.id !== editingId).map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>{t('page.units.responsible')}</label>
+            <select value={form.responsible} onChange={(e) => setForm({...form, responsible: e.target.value})}>
+              <option value="">{t('page.units.select')}</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.units.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (editingId ? t('page.units.update') : t('page.units.create'))}>
+              <Check size={16} />
+            </button>
+          </div>
+        </form>
+      </Modal>
 
-      {showSubUsers && (
-        <div className="modal-overlay" onClick={() => setShowSubUsers(null)}>
-          <div className="modal-content" style={{ width: '500px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{t('page.units.users_title', { name: showSubUsers.name })}</h2>
-            {subUsers.length === 0 ? (
-              <div className="empty-state">{t('page.units.empty_users')}</div>
-            ) : (
-              <div className="table-container">
-                <table>
-                  <thead><tr><th>{t('page.units.table.user')}</th><th>{t('page.units.table.name')}</th><th>{t('page.units.table.email')}</th></tr></thead>
-                  <tbody>
-                    {subUsers.map((u) => (
-                      <tr key={u.id}>
-                        <td>{u.username}</td>
-                        <td>{u.display_name}</td>
-                        <td>{u.email}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="form-actions">
-              <button className="btn btn-icon btn-secondary" onClick={() => setShowSubUsers(null)} title={t('page.units.close')}><X size={16} /></button>
-            </div>
+      <Modal open={!!showSubUsers} onClose={() => setShowSubUsers(null)} width="500px">
+        <h2>{t('page.units.users_title', { name: showSubUsers?.name })}</h2>
+        {(!showSubUsers || subUsers.length === 0) ? (
+          <div className="empty-state">{t('page.units.empty_users')}</div>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead><tr><th>{t('page.units.table.user')}</th><th>{t('page.units.table.name')}</th><th>{t('page.units.table.email')}</th></tr></thead>
+              <tbody>
+                {subUsers.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.username}</td>
+                    <td>{u.display_name}</td>
+                    <td>{u.email}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+        <div className="form-actions">
+          <button className="btn btn-icon btn-secondary" onClick={() => setShowSubUsers(null)} title={t('page.units.close')}><X size={16} /></button>
         </div>
-      )}
+      </Modal>
 
       {viewMode === 'table' ? (
         <div className="card">
@@ -272,8 +269,8 @@ export default function Units() {
                     <td>{u.parent_name || '-'}</td>
                     <td>{u.responsible_name || '-'}</td>
                     <td>
-                      <button className="btn btn-icon btn-sm btn-primary" onClick={() => handleEdit(u)} title={t('common.edit')}><Edit3 size={14} /></button>
-                      <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(u.id)} title={t('common.delete')}><Trash2 size={14} /></button>
+                      {canManage && <button className="btn btn-icon btn-sm btn-primary" onClick={() => handleEdit(u)} title={t('common.edit')}><Edit3 size={14} /></button>}
+                      {canManage && <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(u.id)} title={t('common.delete')}><Trash2 size={14} /></button>}
                     </td>
                   </tr>
                 ))}
@@ -289,7 +286,7 @@ export default function Units() {
           <h3 style={{ marginBottom: '0.75rem' }}>{t('page.units.tree_title')} {moving && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}> moviendo...</span>}</h3>
           {treeData.length === 0 ? <div className="empty-state">{t('page.units.empty')}</div> : (
             treeData.map((node, i) => (
-              <TreeNode key={node.id || i} node={node} onEdit={handleEdit} onDelete={handleDelete} onShowUsers={handleShowUsers} onDrop={handleDrop} onDragStart={setDraggedId} draggedId={draggedId} />
+              <TreeNode key={node.id || i} node={node} canManage={canManage} onEdit={handleEdit} onDelete={handleDelete} onShowUsers={handleShowUsers} onDrop={handleDrop} onDragStart={setDraggedId} draggedId={draggedId} />
             ))
           )}
         </div>

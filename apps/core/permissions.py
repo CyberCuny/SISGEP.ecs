@@ -35,6 +35,15 @@ class IsAdmin(IsAuthenticated):
         return super().has_permission(request, view) and request.user.is_staff
 
 
+class IsAdminOrDirector(IsAuthenticated):
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if request.user.is_staff:
+            return True
+        return has_any_role(request.user, [ROLE_DIRECTOR])
+
+
 class HasRole(IsAuthenticated):
     def __init__(self, *roles):
         self.roles = roles
@@ -44,6 +53,8 @@ class HasRole(IsAuthenticated):
             return False
         if request.user.is_staff:
             return True
+        if not self.roles:
+            return False
         return request.user.roles.filter(name__in=self.roles).exists()
 
 

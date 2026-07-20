@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import api from '../services/api';
 import { scheduleService, activityService } from '../services';
 import Spinner from '../components/Spinner';
 import Breadcrumbs from '../components/Breadcrumbs';

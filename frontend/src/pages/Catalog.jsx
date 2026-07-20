@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { catalogService } from '../services';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, X, Check, Edit3, Trash2 } from 'lucide-react';
+import Modal from '../components/Modal';
 
 const catalogTypes = [
   { key: 'categories' },
@@ -16,6 +19,8 @@ const catalogTypes = [
 
 export default function Catalog() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
   const [activeTab, setActiveTab] = useState('categories');
   const [items, setItems] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -139,9 +144,9 @@ export default function Catalog() {
     <div>
       <div className="page-header">
         <h1>{t('page.catalog.title')}</h1>
-        <button className="btn btn-icon btn-primary" onClick={() => { setEditing(null); setForm({ name: '', number: '', arc: '', objective: '' }); setShowForm(true); }} title={t('page.catalog.new')}>
+        {canManage && <button className="btn btn-icon btn-primary" onClick={() => { setEditing(null); setForm({ name: '', number: '', arc: '', objective: '' }); setShowForm(true); }} title={t('page.catalog.new')}>
           <Plus size={16} />
-        </button>
+        </button>}
       </div>
 
       <div className="tabs">
@@ -152,24 +157,20 @@ export default function Catalog() {
         ))}
       </div>
 
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-content" style={{ width: '450px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editing ? t('page.catalog.edit_title') : t('page.catalog.create_title')} {t(tabLabelKey(current.key))}</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>{t('page.catalog.name')}</label>
-                <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required />
-              </div>
-              {extraFields()}
-              <div className="form-actions">
-                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.catalog.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" title={editing ? t('page.catalog.update') : t('page.catalog.create')}><Check size={16} /></button>
-              </div>
-            </form>
+      <Modal open={showForm} onClose={() => setShowForm(false)} width="450px">
+        <h2>{editing ? t('page.catalog.edit_title') : t('page.catalog.create_title')} {t(tabLabelKey(current.key))}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>{t('page.catalog.name')}</label>
+            <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required />
           </div>
-        </div>
-      )}
+          {extraFields()}
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.catalog.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" title={editing ? t('page.catalog.update') : t('page.catalog.create')}><Check size={16} /></button>
+          </div>
+        </form>
+      </Modal>
 
       <div className="card">
         <div className="table-container">
@@ -186,9 +187,9 @@ export default function Catalog() {
                 <tr key={item.id}>
                   <td>{item.name}</td>
                   {extraCell(item)}
-                  <td>
-                    <button className="btn btn-icon btn-sm btn-primary" onClick={() => openEdit(item)} title={t('common.edit')}><Edit3 size={14} /></button>
-                    <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(item.id)} title={t('common.delete')}><Trash2 size={14} /></button>
+                    <td>
+                    {canManage && <button className="btn btn-icon btn-sm btn-primary" onClick={() => openEdit(item)} title={t('common.edit')}><Edit3 size={14} /></button>}
+                    {canManage && <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(item.id)} title={t('common.delete')}><Trash2 size={14} /></button>}
                   </td>
                 </tr>
               ))}

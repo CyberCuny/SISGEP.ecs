@@ -3,9 +3,15 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Upload } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function ImportPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  if (!user?.is_staff && !hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR])) {
+    return <div className="page-header"><h1>{t('page.import.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.import.no_access')}</p></div>;
+  }
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);

@@ -2,11 +2,16 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { catalogService } from '../services';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { hasAnyRole, ROLES } from '../utils/roles';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, X, Check, Edit3, Trash2 } from 'lucide-react';
+import Modal from '../components/Modal';
 
 export default function Guidelines() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManage = user?.is_staff || hasAnyRole(user, [ROLES.PLANNER, ROLES.DIRECTOR]);
   const toast = useToast();
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -64,7 +69,7 @@ export default function Guidelines() {
     <div className="page-container">
       <div className="page-header">
         <h2>{t('page.guidelines.title')}</h2>
-        <button className="btn btn-icon btn-primary" onClick={() => { setEditing(null); setForm({ name: '', description: '' }); setShowModal(true); }} title={t('page.guidelines.new')}><Plus size={16} /></button>
+        {canManage && <button className="btn btn-icon btn-primary" onClick={() => { setEditing(null); setForm({ name: '', description: '' }); setShowModal(true); }} title={t('page.guidelines.new')}><Plus size={16} /></button>}
       </div>
       <div className="card">
         <div className="table-container">
@@ -77,8 +82,8 @@ export default function Guidelines() {
                   <td>{item.name}</td>
                   <td>{item.description}</td>
                   <td>
-                    <button className="btn btn-icon btn-sm btn-primary" onClick={() => handleEdit(item)} title={t('page.guidelines.edit')}><Edit3 size={14} /></button>
-                    <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(item.id)} title={t('page.guidelines.delete')}><Trash2 size={14} /></button>
+                    {canManage && <button className="btn btn-icon btn-sm btn-primary" onClick={() => handleEdit(item)} title={t('page.guidelines.edit')}><Edit3 size={14} /></button>}
+                    {canManage && <button className="btn btn-icon btn-sm btn-danger" onClick={() => handleDelete(item.id)} title={t('page.guidelines.delete')}><Trash2 size={14} /></button>}
                   </td>
                 </tr>
               ))}
@@ -94,27 +99,23 @@ export default function Guidelines() {
         onConfirm={confirmDeleteAction}
         onCancel={() => setConfirmDelete(null)}
       />
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>{editing ? t('page.guidelines.modal_edit') : t('page.guidelines.modal_new')}</h2>
-            <form onSubmit={handleSave}>
-              <div className="form-group">
-                <label>{t('page.guidelines.name')}</label>
-                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
-              </div>
-              <div className="form-group">
-                <label>{t('page.guidelines.description')}</label>
-                <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={3} />
-              </div>
-              <div className="form-actions">
-                <button type="submit" className="btn btn-icon btn-primary" title={t('page.guidelines.save')}><Check size={16} /></button>
-                <button type="button" className="btn btn-icon btn-secondary" onClick={() => setShowModal(false)} title={t('page.guidelines.cancel')}><X size={16} /></button>
-              </div>
-            </form>
+      <Modal open={showModal} onClose={() => setShowModal(false)}>
+        <h2>{editing ? t('page.guidelines.modal_edit') : t('page.guidelines.modal_new')}</h2>
+        <form onSubmit={handleSave}>
+          <div className="form-group">
+            <label>{t('page.guidelines.name')}</label>
+            <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
           </div>
-        </div>
-      )}
+          <div className="form-group">
+            <label>{t('page.guidelines.description')}</label>
+            <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={3} />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-icon btn-primary" title={t('page.guidelines.save')}><Check size={16} /></button>
+            <button type="button" className="btn btn-icon btn-secondary" onClick={() => setShowModal(false)} title={t('page.guidelines.cancel')}><X size={16} /></button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

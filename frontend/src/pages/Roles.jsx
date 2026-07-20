@@ -5,12 +5,13 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, Edit3, Trash2, X, Check } from 'lucide-react';
-import { hasAnyRole, ROLES } from '../utils/roles';
+import Modal from '../components/Modal';
+
 
 export default function Roles() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const canAdmin = user?.is_staff || hasAnyRole(user, [ROLES.DIRECTOR]);
+  const canAdmin = user?.is_staff;
   const [roles, setRoles] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '' });
@@ -64,25 +65,21 @@ export default function Roles() {
         </button>}
       </div>
 
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-content" style={{ width: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editingId ? t('page.roles.edit_title') : t('page.roles.create_title')}</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>{t('page.roles.name')}</label>
-                <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required placeholder={t('common.name')} />
-              </div>
-              <div className="form-actions">
-                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.roles.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (editingId ? t('page.roles.update') : t('page.roles.create'))}>
-                  <Check size={16} />
-                </button>
-              </div>
-            </form>
+      <Modal open={showForm} onClose={() => setShowForm(false)} width="400px">
+        <h2>{editingId ? t('page.roles.edit_title') : t('page.roles.create_title')}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>{t('page.roles.name')}</label>
+            <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required placeholder={t('common.name')} />
           </div>
-        </div>
-      )}
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.roles.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={saving} title={saving ? t('common.saving') : (editingId ? t('page.roles.update') : t('page.roles.create'))}>
+              <Check size={16} />
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <div className="card">
         <div className="table-container">

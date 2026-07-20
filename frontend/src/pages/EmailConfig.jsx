@@ -9,6 +9,9 @@ export default function EmailConfig() {
   const toast = useToast();
   const { t } = useTranslation();
   const { user } = useAuth();
+  if (!user?.is_staff) {
+    return <div className="page-header"><h1>{t('page.email_config.title')}</h1><p style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('page.email_config.no_access')}</p></div>;
+  }
   const [configs, setConfigs] = useState([]);
   const [form, setForm] = useState({ host: 'localhost', port: 25, use_tls: false, use_ssl: false, username: '', password: '', default_from: '' });
   const [saving, setSaving] = useState(false);

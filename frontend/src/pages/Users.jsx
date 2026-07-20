@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import Spinner from '../components/Spinner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Plus, Users as UsersIcon, Edit3, Key, Trash2, UserPlus, X, Check } from 'lucide-react';
+import Modal from '../components/Modal';
 import { hasAnyRole, ROLES } from '../utils/roles';
 
 export default function Users() {
@@ -127,120 +128,108 @@ export default function Users() {
           </button>
       </div>
 
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal-content" style={{ width: '500px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{editingUser ? t('page.users.edit_title') : t('page.users.create_title')}</h2>
-            <form onSubmit={handleCreate}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>{t('page.users.username')}</label>
-                  <input value={form.username} onChange={(e) => setForm({...form, username: e.target.value})} required />
-                </div>
-                <div className="form-group">
-                  <label>{t('page.users.display_name')}</label>
-                  <input value={form.display_name} onChange={(e) => setForm({...form, display_name: e.target.value})} required />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>{t('page.users.email')}</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>{t('page.users.position')}</label>
-                  <input value={form.position} onChange={(e) => setForm({...form, position: e.target.value})} />
-                </div>
-                {!editingUser && (
-                  <div className="form-group">
-                    <label>{t('page.users.password')}</label>
-                    <input type="password" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} required={!editingUser} />
-                  </div>
-                )}
-              </div>
-              <div className="form-group">
-                <label>{t('page.users.plan_approver')}</label>
-                <select value={form.plan_approver} onChange={(e) => setForm({...form, plan_approver: e.target.value})}>
-                  <option value="">{t('page.users.select')}</option>
-                  {users.filter(u => !editingUser || u.id !== editingUser).map(u => (
-                    <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
-                  ))}
-                </select>
-              </div>
-              {editingUser && (
-                <div className="form-group">
-                  <label>
-                    <input type="checkbox" checked={form.is_disabled} onChange={(e) => setForm({...form, is_disabled: e.target.checked})} />
-                    {' '}{t('page.users.disabled')}
-                  </label>
-                </div>
-              )}
-              <div className="form-actions">
-                <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.users.cancel')}><X size={16} /></button>
-                <button className="btn btn-icon btn-primary" type="submit" disabled={loading} title={loading ? t('common.saving') : (editingUser ? t('page.users.update') : t('page.users.create'))}>
-                  <Check size={16} />
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {resetResult && (
-        <div className="modal-overlay" onClick={() => setResetResult(null)}>
-          <div className="modal-content" style={{ width: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{t('page.users.password_reset_title')}</h2>
-            <div className="alert alert-success">
-              {t('form.new_password')}: <strong>{resetResult}</strong>
+      <Modal open={showForm} onClose={() => setShowForm(false)} width="500px">
+        <h2>{editingUser ? t('page.users.edit_title') : t('page.users.create_title')}</h2>
+        <form onSubmit={handleCreate}>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('page.users.username')}</label>
+              <input value={form.username} onChange={(e) => setForm({...form, username: e.target.value})} required />
             </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-              {t('page.users.password_reset_copy')}
-            </p>
-            <div className="form-actions">
-              <button className="btn btn-icon btn-primary" onClick={() => setResetResult(null)} title={t('page.users.close')}><X size={16} /></button>
+            <div className="form-group">
+              <label>{t('page.users.display_name')}</label>
+              <input value={form.display_name} onChange={(e) => setForm({...form, display_name: e.target.value})} required />
             </div>
           </div>
-        </div>
-      )}
-
-      {showLDAP && (
-        <div className="modal-overlay" onClick={() => setShowLDAP(false)}>
-          <div className="modal-content" style={{ width: '700px' }} onClick={(e) => e.stopPropagation()}>
-            <h2>{t('page.users.ldap_title')}</h2>
-            {loadingLDAP ? <Spinner /> : ldapUsers.length === 0 ? (
-              <div className="empty-state">{t('page.users.ldap_empty')}</div>
-            ) : (
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr><th>{t('page.users.ldap_table.user')}</th><th>{t('page.users.ldap_table.name')}</th><th>{t('page.users.ldap_table.email')}</th><th>{t('page.users.ldap_table.position')}</th><th>{t('page.users.ldap_table.actions')}</th></tr>
-                  </thead>
-                  <tbody>
-                    {ldapUsers.map((lu) => (
-                      <tr key={lu.username}>
-                        <td>{lu.username}</td>
-                        <td>{lu.display_name}</td>
-                        <td>{lu.email || '-'}</td>
-                        <td>{lu.position || '-'}</td>
-                        <td>
-                          {existingUsernames.has(lu.username) ? (
-                            <span className="badge badge-neutral">{t('badge.exists')}</span>
-                          ) : (
-                            <button className="btn btn-icon btn-sm btn-success" onClick={() => handleImportLDAP(lu)} title={t('page.users.ldap_import')}><UserPlus size={14} /></button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="form-group">
+            <label>{t('page.users.email')}</label>
+            <input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('page.users.position')}</label>
+              <input value={form.position} onChange={(e) => setForm({...form, position: e.target.value})} />
+            </div>
+            {!editingUser && (
+              <div className="form-group">
+                <label>{t('page.users.password')}</label>
+                <input type="password" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} required={!editingUser} />
               </div>
             )}
-            <div className="form-actions">
-              <button className="btn btn-icon btn-secondary" onClick={() => setShowLDAP(false)} title={t('page.users.close')}><X size={16} /></button>
-            </div>
           </div>
+          <div className="form-group">
+            <label>{t('page.users.plan_approver')}</label>
+            <select value={form.plan_approver} onChange={(e) => setForm({...form, plan_approver: e.target.value})}>
+              <option value="">{t('page.users.select')}</option>
+              {users.filter(u => !editingUser || u.id !== editingUser).map(u => (
+                <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              ))}
+            </select>
+          </div>
+          {editingUser && (
+            <div className="form-group">
+              <label>
+                <input type="checkbox" checked={form.is_disabled} onChange={(e) => setForm({...form, is_disabled: e.target.checked})} />
+                {' '}{t('page.users.disabled')}
+              </label>
+            </div>
+          )}
+          <div className="form-actions">
+            <button className="btn btn-icon btn-secondary" type="button" onClick={() => setShowForm(false)} title={t('page.users.cancel')}><X size={16} /></button>
+            <button className="btn btn-icon btn-primary" type="submit" disabled={loading} title={loading ? t('common.saving') : (editingUser ? t('page.users.update') : t('page.users.create'))}>
+              <Check size={16} />
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!resetResult} onClose={() => setResetResult(null)} width="400px">
+        <h2>{t('page.users.password_reset_title')}</h2>
+        <div className="alert alert-success">
+          {t('form.new_password')}: <strong>{resetResult}</strong>
         </div>
-      )}
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+          {t('page.users.password_reset_copy')}
+        </p>
+        <div className="form-actions">
+          <button className="btn btn-icon btn-primary" onClick={() => setResetResult(null)} title={t('page.users.close')}><X size={16} /></button>
+        </div>
+      </Modal>
+
+      <Modal open={showLDAP} onClose={() => setShowLDAP(false)} width="700px">
+        <h2>{t('page.users.ldap_title')}</h2>
+        {loadingLDAP ? <Spinner /> : ldapUsers.length === 0 ? (
+          <div className="empty-state">{t('page.users.ldap_empty')}</div>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr><th>{t('page.users.ldap_table.user')}</th><th>{t('page.users.ldap_table.name')}</th><th>{t('page.users.ldap_table.email')}</th><th>{t('page.users.ldap_table.position')}</th><th>{t('page.users.ldap_table.actions')}</th></tr>
+              </thead>
+              <tbody>
+                {ldapUsers.map((lu) => (
+                  <tr key={lu.username}>
+                    <td>{lu.username}</td>
+                    <td>{lu.display_name}</td>
+                    <td>{lu.email || '-'}</td>
+                    <td>{lu.position || '-'}</td>
+                    <td>
+                      {existingUsernames.has(lu.username) ? (
+                        <span className="badge badge-neutral">{t('badge.exists')}</span>
+                      ) : (
+                        <button className="btn btn-icon btn-sm btn-success" onClick={() => handleImportLDAP(lu)} title={t('page.users.ldap_import')}><UserPlus size={14} /></button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="form-actions">
+          <button className="btn btn-icon btn-secondary" onClick={() => setShowLDAP(false)} title={t('page.users.close')}><X size={16} /></button>
+        </div>
+      </Modal>
 
       <div className="card">
         <div className="table-container">

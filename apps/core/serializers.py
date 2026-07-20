@@ -12,7 +12,7 @@ class RoleSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     roles = serializers.SerializerMethodField()
-    plan_approver_name = serializers.CharField(source='plan_approver.display_name', read_only=True)
+    plan_approver_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -23,6 +23,9 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_roles(self, obj):
         return [{'id': ur.role.id, 'name': ur.role.name} for ur in obj.userrole_set.all()]
+
+    def get_plan_approver_name(self, obj):
+        return obj.plan_approver.display_name if obj.plan_approver else None
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -49,12 +52,18 @@ class UserRoleSerializer(serializers.ModelSerializer):
 
 
 class OrganizationalUnitSerializer(serializers.ModelSerializer):
-    responsible_name = serializers.CharField(source='responsible.display_name', read_only=True)
-    parent_name = serializers.CharField(source='parent.name', read_only=True)
+    responsible_name = serializers.SerializerMethodField()
+    parent_name = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationalUnit
         fields = '__all__'
+
+    def get_responsible_name(self, obj):
+        return obj.responsible.display_name if obj.responsible else None
+
+    def get_parent_name(self, obj):
+        return obj.parent.name if obj.parent else None
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -98,11 +107,12 @@ class GuidelineSerializer(serializers.ModelSerializer):
 
 
 class EmailConfigSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    password = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = EmailConfig
         fields = ['id', 'host', 'port', 'use_tls', 'use_ssl', 'username', 'password', 'default_from']
+        extra_kwargs = {'password': {'write_only': True}}
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

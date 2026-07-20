@@ -10,8 +10,8 @@ export const activityService = {
   mapToUser: (data) => api.post('/activities/map_to_user/', data),
   assignToUnits: (data) => api.post('/activities/assign_to_units/', data),
   distribute: (data) => api.post('/activities/distribute_to_subunits/', data),
-  distributeCronograms: (data) => api.post('/activities/distribute_subunit_cronograms/', data),
   approveSubunit: (data) => api.post('/activities/approve_subunit_activity/', data),
+  rejectSubunitActivity: (data) => api.post('/activities/reject_subunit_activity/', data),
   approveSubunitCronograms: (data) => api.post('/activities/approve_subunit_cronograms/', data),
 };
 
@@ -25,7 +25,7 @@ export const scheduleService = {
   individualCalendar: (params) => api.get('/schedule/periods/individual_calendar/', { params }),
   annualCalendar: (params) => api.get('/schedule/periods/annual_calendar/', { params }),
   complianceStats: (params) => api.get('/schedule/periods/compliance_stats/', { params }),
-  updateStatus: (id, data) => api.patch(`/schedule/periods/${id}/update_single_status/`, data),
+  updateStatus: (id, data) => api.post(`/schedule/periods/${id}/update_single_status/`, data),
   dragDrop: (id, data) => api.patch(`/schedule/periods/${id}/drag_drop/`, data),
   saveBatch: (data) => api.post('/schedule/work-days/save_batch/', data),
 };
@@ -40,8 +40,8 @@ export const userService = {
   meUpdate: (data) => api.patch('/users/me_update/', data),
   login: (data) => api.post('/users/login/', data),
   logout: () => api.post('/users/logout/'),
-  changePassword: (data) => api.post('/users/change_password/', data),
-  resetPassword: (data) => api.post('/users/reset_password/', data),
+  changePassword: (id, data) => api.post(`/users/${id}/change_password/`, data),
+  resetPassword: (id, data) => api.post(`/users/${id}/reset_password/`, data),
   assignRoles: (data) => api.post('/users/assign_roles/', data),
   removeRoles: (data) => api.post('/users/remove_roles/', data),
   ldapList: () => api.get('/users/ldap_list/'),
@@ -74,7 +74,7 @@ export const messageService = {
   create: (data) => api.post('/messages/', data),
   inbox: (params) => api.get('/messages/inbox/', { params }),
   sent: (params) => api.get('/messages/sent/', { params }),
-  markRead: (id) => api.patch(`/messages/${id}/mark_read/`),
+  markRead: (id) => api.post(`/messages/${id}/mark_read/`),
   unreadCount: () => api.get('/messages/unread_count/'),
 };
 
